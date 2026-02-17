@@ -51,7 +51,7 @@ export const DailyNotesPage = () => {
       <section>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Daily Notes</h1>
         <p className="text-sm text-muted-foreground">
-          Keep a lightweight log of decisions, blockers, and updates.
+          prueba a lightweight log of decisions, blockers, and updates.
         </p>
       </section>
       <Card>
