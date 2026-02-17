@@ -32,7 +32,7 @@ export const DailyTasksPage = () => {
           Daily Work Tasks
         </h1>
         <p className="text-sm text-slate-600">
-          PRUEBA, update, and complete your tasks every day.
+          PRUEBAs, update, and complete your tasks every day.
         </p>
       </section>
       <TaskForm onCreateTask={handleCreateTask} />
