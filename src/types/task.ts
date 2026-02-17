@@ -5,5 +5,7 @@ export type Task = {
   title: string;
   details: string;
   status: TaskStatus;
+  projectId: string | null;
+  taskDate: string;
   createdAt: string;
 };

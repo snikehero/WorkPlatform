@@ -46,9 +46,13 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: radial-gradient(circle at top right, #e0f2fe, transparent 35%), var(--background);
+  background: radial-gradient(circle at top right, oklch(0.93 0.05 240), transparent 35%), var(--background);
   color: var(--foreground);
   font-family: "Inter", "Segoe UI", sans-serif;
+}
+
+.dark body {
+  background: radial-gradient(circle at top right, oklch(0.28 0.03 260), transparent 35%), var(--background);
 }
 
 @theme inline {
