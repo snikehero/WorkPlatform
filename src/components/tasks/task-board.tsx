@@ -8,6 +8,8 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  type DragEndEvent,
+  type DragStartEvent,
   useDroppable,
   useSensor,
   useSensors,
@@ -146,17 +148,22 @@ export const TaskBoard = ({ tasks, projects, onUpdateStatus, onDeleteTask }: Tas
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [activeTaskId, setActiveTaskId] = React.useState<string | null>(null);
 
-  const handleDragStart = (event: { active: { id: string } }) => {
-    setActiveTaskId(event.active.id);
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveTaskId(String(event.active.id));
   };
 
-  const handleDragEnd = (event: { active: { id: string }; over: { id: string } | null }) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     setActiveTaskId(null);
-    if (!event.over) return;
+
     const taskId = String(event.active.id);
-    const columnKey = String(event.over.id) as TaskStatus;
+    const overId = event.over ? String(event.over.id) : null;
+    if (!overId) return;
+
     const task = tasks.find((item) => item.id === taskId);
-    if (!task || !columns.find((column) => column.key === columnKey)) return;
+    const targetColumn = columns.find((column) => column.key === overId);
+    if (!task || !targetColumn) return;
+
+    const columnKey = targetColumn.key;
     if (task.status !== columnKey) {
       onUpdateStatus(taskId, columnKey);
     }
