@@ -28,11 +28,19 @@ export const DailyTasksPage = () => {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Daily Work Tasks</h1>
-        <p className="text-sm text-slate-600">Log, update, and complete your tasks every day.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          Daily Work Tasks
+        </h1>
+        <p className="text-sm text-slate-600">
+          PRUEBA, update, and complete your tasks every day.
+        </p>
       </section>
       <TaskForm onCreateTask={handleCreateTask} />
-      <TaskList tasks={tasks} onUpdateStatus={handleUpdateStatus} onDeleteTask={handleDeleteTask} />
+      <TaskList
+        tasks={tasks}
+        onUpdateStatus={handleUpdateStatus}
+        onDeleteTask={handleDeleteTask}
+      />
     </div>
   );
 };
