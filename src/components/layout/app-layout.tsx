@@ -116,6 +116,18 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                 >
                   Calendar
                 </NavLink>
+                <NavLink
+                  to="/pc-maintenance"
+                  className={({ isActive }) =>
+                    `block rounded-md px-2 py-2 text-sm ${
+                      isActive
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`
+                  }
+                >
+                  PC Maintenance
+                </NavLink>
               </nav>
             </div>
           </div>

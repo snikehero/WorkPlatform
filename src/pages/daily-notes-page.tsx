@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { NoteForm } from "@/components/notes/note-form";
 import { NoteList } from "@/components/notes/note-list";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { parseObsidianDailyMarkdown } from "@/lib/obsidian-daily-parser";
 import { noteStore } from "@/stores/note-store";
 import { format } from "date-fns";
 
@@ -12,6 +13,8 @@ export const DailyNotesPage = () => {
   const today = new Date().toISOString().slice(0, 10);
   const [version, setVersion] = useState(0);
   const [selectedDate, setSelectedDate] = useState(today);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const notes = useMemo(() => noteStore.all(), [version]);
   const filteredNotes = useMemo(
     () => notes.filter((note) => note.noteDate === selectedDate),
@@ -28,6 +31,39 @@ export const DailyNotesPage = () => {
   const handleDeleteNote = (noteId: string) => {
     noteStore.remove(noteId);
     refresh();
+  };
+
+  const handleImportFiles = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) return;
+
+    const existingNotes = noteStore.all();
+    let imported = 0;
+    let skipped = 0;
+
+    for (const file of files) {
+      const markdown = await file.text();
+      const parsed = parseObsidianDailyMarkdown(file.name, markdown);
+      const duplicate = existingNotes.some(
+        (note) =>
+          note.noteDate === parsed.noteDate &&
+          note.title === parsed.title &&
+          note.content === parsed.content
+      );
+
+      if (duplicate) {
+        skipped += 1;
+        continue;
+      }
+
+      const created = noteStore.add(parsed.title, parsed.content, parsed.noteDate);
+      existingNotes.unshift(created);
+      imported += 1;
+    }
+
+    setImportMessage(`Imported ${imported} file(s). Skipped ${skipped} duplicate(s).`);
+    refresh();
+    event.target.value = "";
   };
 
   const calendarClassNames = {
@@ -84,7 +120,22 @@ export const DailyNotesPage = () => {
             <Button variant="secondary" onClick={() => setSelectedDate(today)}>
               Today
             </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".md,text/markdown"
+              multiple
+              className="hidden"
+              onChange={handleImportFiles}
+            />
+            <Button
+              variant="secondary"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Import Obsidian .md
+            </Button>
           </div>
+          {importMessage ? <p className="mt-3 text-sm text-muted-foreground">{importMessage}</p> : null}
         </CardContent>
       </Card>
       <NoteForm onCreateNote={handleCreateNote} selectedDate={selectedDate} />
