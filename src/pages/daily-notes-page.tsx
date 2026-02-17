@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { NoteForm } from "@/components/notes/note-form";
 import { NoteList } from "@/components/notes/note-list";
 import { Button } from "@/components/ui/button";
@@ -7,37 +7,47 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { parseObsidianDailyMarkdown } from "@/lib/obsidian-daily-parser";
 import { noteStore } from "@/stores/note-store";
+import type { Note } from "@/types/note";
 import { format } from "date-fns";
+import { useI18n } from "@/i18n/i18n";
 
 export const DailyNotesPage = () => {
+  const { t } = useI18n();
   const today = new Date().toISOString().slice(0, 10);
-  const [version, setVersion] = useState(0);
   const [selectedDate, setSelectedDate] = useState(today);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Note[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const notes = useMemo(() => noteStore.all(), [version]);
+
+  const loadNotes = async () => {
+    const data = await noteStore.all();
+    setNotes(data);
+  };
+
+  useEffect(() => {
+    loadNotes().catch(() => setNotes([]));
+  }, []);
+
   const filteredNotes = useMemo(
     () => notes.filter((note) => note.noteDate === selectedDate),
     [notes, selectedDate]
   );
 
-  const refresh = () => setVersion((current) => current + 1);
-
-  const handleCreateNote = (title: string, content: string, noteDate: string) => {
-    noteStore.add(title, content, noteDate);
-    refresh();
+  const handleCreateNote = async (title: string, content: string, noteDate: string) => {
+    await noteStore.add(title, content, noteDate);
+    await loadNotes();
   };
 
-  const handleDeleteNote = (noteId: string) => {
-    noteStore.remove(noteId);
-    refresh();
+  const handleDeleteNote = async (noteId: string) => {
+    await noteStore.remove(noteId);
+    await loadNotes();
   };
 
   const handleImportFiles = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
 
-    const existingNotes = noteStore.all();
+    const existingNotes = [...notes];
     let imported = 0;
     let skipped = 0;
 
@@ -56,13 +66,13 @@ export const DailyNotesPage = () => {
         continue;
       }
 
-      const created = noteStore.add(parsed.title, parsed.content, parsed.noteDate);
+      const created = await noteStore.add(parsed.title, parsed.content, parsed.noteDate);
       existingNotes.unshift(created);
       imported += 1;
     }
 
-    setImportMessage(`Imported ${imported} file(s). Skipped ${skipped} duplicate(s).`);
-    refresh();
+    setImportMessage(t("notes.importResult", { imported, skipped }));
+    await loadNotes();
     event.target.value = "";
   };
 
@@ -85,9 +95,9 @@ export const DailyNotesPage = () => {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Daily Notes</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("notes.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
-          prueba a lightweight log of decisions, blockers, and updates.
+          {t("notes.pageSubtitle")}
         </p>
       </section>
       <Card>
@@ -95,7 +105,7 @@ export const DailyNotesPage = () => {
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="notes-date">
-                Note date
+                {t("notes.noteDate")}
               </label>
               <Popover>
                 <PopoverTrigger asChild>
@@ -118,7 +128,7 @@ export const DailyNotesPage = () => {
               </Popover>
             </div>
             <Button variant="secondary" onClick={() => setSelectedDate(today)}>
-              Today
+              {t("common.today")}
             </Button>
             <input
               ref={fileInputRef}
@@ -132,7 +142,7 @@ export const DailyNotesPage = () => {
               variant="secondary"
               onClick={() => fileInputRef.current?.click()}
             >
-              Import Obsidian .md
+              {t("notes.importObsidian")}
             </Button>
           </div>
           {importMessage ? <p className="mt-3 text-sm text-muted-foreground">{importMessage}</p> : null}

@@ -3,6 +3,7 @@ import type { MaintenanceRecord } from "@/types/maintenance-record";
 const DEFAULT_EXPORT_API = "http://localhost:8000/api/maintenance/export";
 const EXPORT_API_URL =
   (import.meta.env.VITE_MAINTENANCE_EXPORT_API as string | undefined) ?? DEFAULT_EXPORT_API;
+const AUTH_STORAGE_KEY = "workplatform-auth";
 
 const resolveFilename = (headerValue: string | null, fallback: string) => {
   if (!headerValue) return fallback;
@@ -37,13 +38,30 @@ export const exportMaintenanceRecordToExcel = async (
   record: MaintenanceRecord,
   templateFile: File
 ) => {
+  const rawAuth = localStorage.getItem(AUTH_STORAGE_KEY);
+  let token: string | null = null;
+  if (rawAuth) {
+    try {
+      const parsed = JSON.parse(rawAuth) as { token?: string };
+      token = parsed.token ?? null;
+    } catch {
+      token = null;
+    }
+  }
+
   const body = new FormData();
   body.append("template", templateFile);
   body.append("payload", JSON.stringify(record));
 
+  const headers = new Headers();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
   const response = await fetch(EXPORT_API_URL, {
     method: "POST",
     body,
+    headers,
   });
 
   if (!response.ok) {

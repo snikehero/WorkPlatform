@@ -1,46 +1,13 @@
+import { apiRequest } from "@/lib/api";
 import type { Note } from "@/types/note";
-import { createId } from "@/lib/id";
-
-const NOTES_KEY = "workplatform-daily-notes";
-
-const loadNotes = (): Note[] => {
-  const raw = localStorage.getItem(NOTES_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw) as Note[];
-    return parsed.map((note) => ({
-      ...note,
-      noteDate: note.noteDate ?? note.createdAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
-    }));
-  } catch {
-    return [];
-  }
-};
-
-let notes: Note[] = loadNotes();
-
-const saveNotes = () => {
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-};
 
 export const noteStore = {
-  all: () => notes,
-  add: (title: string, content: string, noteDate: string) => {
-    const note: Note = {
-      id: createId(),
-      title,
-      content,
-      noteDate,
-      createdAt: new Date().toISOString(),
-    };
-
-    notes = [note, ...notes];
-    saveNotes();
-    return note;
-  },
-  remove: (noteId: string) => {
-    notes = notes.filter((note) => note.id !== noteId);
-    saveNotes();
-  },
+  all: () => apiRequest<Note[]>("/api/notes"),
+  add: (title: string, content: string, noteDate: string) =>
+    apiRequest<Note>("/api/notes", {
+      method: "POST",
+      body: JSON.stringify({ title, content, noteDate }),
+    }),
+  remove: (noteId: string) =>
+    apiRequest<{ ok: boolean }>(`/api/notes/${noteId}`, { method: "DELETE" }),
 };

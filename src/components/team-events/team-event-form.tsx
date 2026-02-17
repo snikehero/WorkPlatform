@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useI18n } from "@/i18n/i18n";
 
 type TeamEventFormProps = {
   onCreateEvent: (
@@ -17,6 +18,7 @@ type TeamEventFormProps = {
 };
 
 export const TeamEventForm = ({ onCreateEvent, selectedDate }: TeamEventFormProps) => {
+  const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [owner, setOwner] = useState("");
@@ -41,50 +43,50 @@ export const TeamEventForm = ({ onCreateEvent, selectedDate }: TeamEventFormProp
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Team Event</CardTitle>
-        <CardDescription>Add an upcoming team item to the calendar.</CardDescription>
+        <CardTitle>{t("calendar.formTitle")}</CardTitle>
+        <CardDescription>{t("calendar.formSubtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <Label htmlFor="team-event-title">Title</Label>
+            <Label htmlFor="team-event-title">{t("common.title")}</Label>
             <Input
               id="team-event-title"
-              placeholder="Sprint planning"
+              placeholder={t("calendar.titlePlaceholder")}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="team-event-description">Description</Label>
+            <Label htmlFor="team-event-description">{t("common.description")}</Label>
             <Textarea
               id="team-event-description"
-              placeholder="Agenda, links, or goals..."
+              placeholder={t("calendar.descriptionPlaceholder")}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="team-event-owner">Owner</Label>
+              <Label htmlFor="team-event-owner">{t("common.owner")}</Label>
               <Input
                 id="team-event-owner"
-                placeholder="Alex"
+                placeholder={t("calendar.ownerPlaceholder")}
                 value={owner}
                 onChange={(event) => setOwner(event.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="team-event-location">Location</Label>
+              <Label htmlFor="team-event-location">{t("common.location")}</Label>
               <Input
                 id="team-event-location"
-                placeholder="Zoom / Room 3A"
+                placeholder={t("calendar.locationPlaceholder")}
                 value={location}
                 onChange={(event) => setLocation(event.target.value)}
               />
             </div>
           </div>
-          <Button type="submit">Add event</Button>
+          <Button type="submit">{t("calendar.addEvent")}</Button>
         </form>
       </CardContent>
     </Card>

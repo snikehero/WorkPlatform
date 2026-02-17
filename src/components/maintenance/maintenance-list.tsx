@@ -2,6 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { MaintenanceRecord } from "@/types/maintenance-record";
+import { useI18n } from "@/i18n/i18n";
 
 type MaintenanceListProps = {
   records: MaintenanceRecord[];
@@ -16,15 +17,21 @@ export const MaintenanceList = ({
   onExportRecord,
   canExport,
 }: MaintenanceListProps) => {
+  const { t } = useI18n();
+  const getCheckLabel = (checkId: string, fallback: string) => {
+    const key = `maintenance.check.${checkId}`;
+    const translated = t(key);
+    return translated === key ? fallback : translated;
+  };
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Registros de Mantenimiento</CardTitle>
-        <CardDescription>Historial capturado desde la plataforma.</CardDescription>
+        <CardTitle>{t("maintenance.listTitle")}</CardTitle>
+        <CardDescription>{t("maintenance.listSubtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
         {records.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay mantenimientos para esta fecha.</p>
+          <p className="text-sm text-muted-foreground">{t("maintenance.empty")}</p>
         ) : (
           <ul className="space-y-4">
             {records.map((record) => {
@@ -44,21 +51,21 @@ export const MaintenanceList = ({
                       <p className="text-sm font-medium text-foreground">
                         {record.model} · {record.serialNumber}
                       </p>
-                      <p className="text-xs text-muted-foreground">Marca: {record.brand}</p>
+                      <p className="text-xs text-muted-foreground">{t("maintenance.brandPrefix")}: {record.brand}</p>
                       <p className="text-xs text-muted-foreground">
-                        QR: {record.qr} · Usuario: {record.user}
+                        {t("maintenance.qrUserPrefix")}: {record.qr} · {t("maintenance.userPrefix")}: {record.user}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Consecutivo: {record.consecutive}{record.maintenanceType}
+                        {t("maintenance.consecutivePrefix")}: {record.consecutive}{record.maintenanceType}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Ubicacion: {record.location} · Responsable: {record.responsibleName}
+                        {t("maintenance.locationResponsiblePrefix")}: {record.location} · {t("maintenance.responsiblePrefix")}: {record.responsibleName}
                       </p>
                       <p className="text-xs text-muted-foreground/80">
-                        Fecha: {format(new Date(`${record.maintenanceDate}T00:00:00`), "PPP")}
+                        {t("maintenance.datePrefix")}: {format(new Date(`${record.maintenanceDate}T00:00:00`), "PPP")}
                       </p>
                       <p className="text-xs text-muted-foreground/80">
-                        Actividades revisadas: {checkedCount}/{totalCount}
+                        {t("maintenance.reviewedCountPrefix")}: {checkedCount}/{totalCount}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -68,10 +75,10 @@ export const MaintenanceList = ({
                         onClick={() => onExportRecord(record)}
                         disabled={!canExport}
                       >
-                        Export Excel
+                        {t("maintenance.exportExcel")}
                       </Button>
                       <Button variant="destructive" size="sm" onClick={() => onDeleteRecord(record.id)}>
-                        Delete
+                        {t("common.delete")}
                       </Button>
                     </div>
                   </div>
@@ -79,15 +86,15 @@ export const MaintenanceList = ({
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
-                        Hardware revisado
+                        {t("maintenance.hardwareChecked")}
                       </p>
                       {checkedHardware.length === 0 ? (
-                        <p className="mt-1 text-xs text-muted-foreground">Sin checks marcados.</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{t("maintenance.noChecks")}</p>
                       ) : (
                         <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
                           {checkedHardware.map((item) => (
                             <li key={item.id}>
-                              - {item.label}
+                              - {getCheckLabel(item.id, item.label)}
                               {item.observation ? ` (${item.observation})` : ""}
                             </li>
                           ))}
@@ -96,15 +103,15 @@ export const MaintenanceList = ({
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
-                        Software revisado
+                        {t("maintenance.softwareChecked")}
                       </p>
                       {checkedSoftware.length === 0 ? (
-                        <p className="mt-1 text-xs text-muted-foreground">Sin checks marcados.</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{t("maintenance.noChecks")}</p>
                       ) : (
                         <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
                           {checkedSoftware.map((item) => (
                             <li key={item.id}>
-                              - {item.label}
+                              - {getCheckLabel(item.id, item.label)}
                               {item.observation ? ` (${item.observation})` : ""}
                             </li>
                           ))}

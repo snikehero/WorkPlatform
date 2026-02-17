@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Project } from "@/types/project";
+import { useI18n } from "@/i18n/i18n";
 
 type ProjectListProps = {
   projects: Project[];
@@ -13,16 +14,17 @@ export const ProjectList = ({
   getTaskCount,
   onDeleteProject,
 }: ProjectListProps) => {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Projects</CardTitle>
-        <CardDescription>Group tasks and keep focus aligned.</CardDescription>
+        <CardTitle>{t("projects.pageTitle")}</CardTitle>
+        <CardDescription>{t("projects.listSubtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
         {projects.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No projects yet. Add your first project above.
+            {t("projects.empty")}
           </p>
         ) : (
           <ul className="space-y-3">
@@ -35,11 +37,11 @@ export const ProjectList = ({
                       <p className="text-sm text-muted-foreground">{project.description}</p>
                     ) : null}
                     <p className="text-xs text-muted-foreground/70">
-                      {getTaskCount(project.id)} task(s)
+                      {getTaskCount(project.id)} {t("projects.taskCount")}
                     </p>
                   </div>
                   <Button variant="destructive" size="sm" onClick={() => onDeleteProject(project.id)}>
-                    Delete
+                    {t("common.delete")}
                   </Button>
                 </div>
               </li>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,12 +6,24 @@ import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { teamEventStore } from "@/stores/team-event-store";
 import { TeamEventForm } from "@/components/team-events/team-event-form";
+import type { TeamEvent } from "@/types/team-event";
+import { useI18n } from "@/i18n/i18n";
 
 export const TeamCalendarPage = () => {
+  const { t } = useI18n();
   const today = new Date().toISOString().slice(0, 10);
-  const [version, setVersion] = useState(0);
   const [selectedDate, setSelectedDate] = useState(today);
-  const events = useMemo(() => teamEventStore.all(), [version]);
+  const [events, setEvents] = useState<TeamEvent[]>([]);
+
+  const loadEvents = async () => {
+    const data = await teamEventStore.all();
+    setEvents(data);
+  };
+
+  useEffect(() => {
+    loadEvents().catch(() => setEvents([]));
+  }, []);
+
   const selectedDayEvents = useMemo(
     () => events.filter((event) => event.eventDate === selectedDate),
     [events, selectedDate]
@@ -21,22 +33,20 @@ export const TeamCalendarPage = () => {
     [events]
   );
 
-  const refresh = () => setVersion((current) => current + 1);
-
-  const handleCreateEvent = (
+  const handleCreateEvent = async (
     title: string,
     eventDate: string,
     description: string,
     owner: string,
     location: string
   ) => {
-    teamEventStore.add(title, eventDate, description, owner, location);
-    refresh();
+    await teamEventStore.add(title, eventDate, description, owner, location);
+    await loadEvents();
   };
 
-  const handleClearSelectedDate = () => {
-    teamEventStore.removeByDate(selectedDate);
-    refresh();
+  const handleClearSelectedDate = async () => {
+    await teamEventStore.removeByDate(selectedDate);
+    await loadEvents();
   };
 
   const calendarClassNames = {
@@ -58,16 +68,16 @@ export const TeamCalendarPage = () => {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Team Calendar</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("calendar.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
-          Track shared team events separate from personal tasks.
+          {t("calendar.pageSubtitle")}
         </p>
       </section>
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly View</CardTitle>
-          <CardDescription>Select a day to see its events.</CardDescription>
+          <CardTitle>{t("calendar.monthlyView")}</CardTitle>
+          <CardDescription>{t("calendar.selectDay")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Calendar
@@ -87,16 +97,16 @@ export const TeamCalendarPage = () => {
                   {format(new Date(`${selectedDate}T00:00:00`), "PPP")}
                 </p>
                 {selectedDayEvents.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No events scheduled.</p>
+                  <p className="text-xs text-muted-foreground">{t("calendar.noEvents")}</p>
                 ) : (
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/40 p-2">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <AlertTriangle className="size-4 text-amber-500" />
-                        Delete all events for this date
+                        {t("calendar.deleteAllForDate")}
                       </div>
                       <Button size="sm" variant="destructive" onClick={handleClearSelectedDate}>
-                        Clear day
+                        {t("calendar.clearDay")}
                       </Button>
                     </div>
                     {selectedDayEvents.map((event) => (
@@ -106,8 +116,8 @@ export const TeamCalendarPage = () => {
                           <p className="text-xs text-muted-foreground">{event.description}</p>
                         ) : null}
                         <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                          {event.owner ? <span>Owner: {event.owner}</span> : null}
-                          {event.location ? <span>Location: {event.location}</span> : null}
+                          {event.owner ? <span>{t("calendar.ownerPrefix")}: {event.owner}</span> : null}
+                          {event.location ? <span>{t("calendar.locationPrefix")}: {event.location}</span> : null}
                         </div>
                       </div>
                     ))}

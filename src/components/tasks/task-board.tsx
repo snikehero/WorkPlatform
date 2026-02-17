@@ -20,6 +20,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useI18n } from "@/i18n/i18n";
 
 type TaskBoardProps = {
   tasks: Task[];
@@ -28,10 +29,10 @@ type TaskBoardProps = {
   onDeleteTask: (taskId: string) => void;
 };
 
-const columns: Array<{ key: TaskStatus; title: string }> = [
-  { key: "todo", title: "To do" },
-  { key: "in-progress", title: "In progress" },
-  { key: "done", title: "Done" },
+const columns: Array<{ key: TaskStatus; titleKey: string }> = [
+  { key: "todo", titleKey: "tasks.todo" },
+  { key: "in-progress", titleKey: "tasks.inProgress" },
+  { key: "done", titleKey: "tasks.done" },
 ];
 
 type BoardTaskCardProps = {
@@ -42,34 +43,46 @@ type BoardTaskCardProps = {
 };
 
 const BoardTaskCard = ({ task, projectName, onUpdateStatus, onDeleteTask }: BoardTaskCardProps) => (
-  <div className="rounded-lg border border-border bg-background p-3">
-    <div className="space-y-2">
-      <p className="text-sm font-medium text-foreground">{task.title}</p>
-      {task.details ? <p className="text-xs text-muted-foreground">{task.details}</p> : null}
-      <div className="flex flex-wrap gap-2">
-        {projectName ? <Badge variant="neutral">{projectName}</Badge> : null}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="secondary" onClick={() => onUpdateStatus(task.id, "todo")}>
-          To do
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => onUpdateStatus(task.id, "in-progress")}
-        >
-          In progress
-        </Button>
-        <Button size="sm" variant="secondary" onClick={() => onUpdateStatus(task.id, "done")}>
-          Done
-        </Button>
-        <Button size="sm" variant="destructive" onClick={() => onDeleteTask(task.id)}>
-          Delete
-        </Button>
+  <TaskCardBody
+    task={task}
+    projectName={projectName}
+    onUpdateStatus={onUpdateStatus}
+    onDeleteTask={onDeleteTask}
+  />
+);
+
+const TaskCardBody = ({ task, projectName, onUpdateStatus, onDeleteTask }: BoardTaskCardProps) => {
+  const { t } = useI18n();
+  return (
+    <div className="rounded-lg border border-border bg-background p-3">
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-foreground">{task.title}</p>
+        {task.details ? <p className="text-xs text-muted-foreground">{task.details}</p> : null}
+        <div className="flex flex-wrap gap-2">
+          {projectName ? <Badge variant="neutral">{projectName}</Badge> : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={() => onUpdateStatus(task.id, "todo")}>
+            {t("tasks.todo")}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => onUpdateStatus(task.id, "in-progress")}
+          >
+            {t("tasks.inProgress")}
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => onUpdateStatus(task.id, "done")}>
+            {t("tasks.done")}
+          </Button>
+          <Button size="sm" variant="destructive" onClick={() => onDeleteTask(task.id)}>
+            {t("common.delete")}
+          </Button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const SortableTaskCard = ({ task, projectName, onUpdateStatus, onDeleteTask }: BoardTaskCardProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -101,31 +114,32 @@ const SortableTaskCard = ({ task, projectName, onUpdateStatus, onDeleteTask }: B
 
 const BoardColumn = ({
   columnKey,
-  title,
+  titleKey,
   tasks,
   projectMap,
   onUpdateStatus,
   onDeleteTask,
 }: {
   columnKey: TaskStatus;
-  title: string;
+  titleKey: string;
   tasks: Task[];
   projectMap: Map<string, Project>;
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
 }) => {
+  const { t } = useI18n();
   const { setNodeRef } = useDroppable({ id: columnKey });
 
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-semibold text-foreground">{title}</div>
+        <div className="text-sm font-semibold text-foreground">{t(titleKey)}</div>
         <Badge variant="neutral">{tasks.length}</Badge>
       </div>
       <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
         <div ref={setNodeRef} className="space-y-3">
           {tasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No tasks</p>
+            <p className="text-sm text-muted-foreground">{t("tasks.noTasks")}</p>
           ) : (
             tasks.map((task) => (
               <SortableTaskCard
@@ -185,7 +199,7 @@ export const TaskBoard = ({ tasks, projects, onUpdateStatus, onDeleteTask }: Tas
             <BoardColumn
               key={column.key}
               columnKey={column.key}
-              title={column.title}
+              titleKey={column.titleKey}
               tasks={columnTasks}
               projectMap={projectMap}
               onUpdateStatus={onUpdateStatus}

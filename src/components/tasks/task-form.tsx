@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { Project } from "@/types/project";
+import { useI18n } from "@/i18n/i18n";
 
 type TaskFormProps = {
   onCreateTask: (
@@ -19,6 +20,7 @@ type TaskFormProps = {
 };
 
 export const TaskForm = ({ onCreateTask, projects, selectedDate }: TaskFormProps) => {
+  const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
   const [projectId, setProjectId] = useState<string>("none");
@@ -36,37 +38,37 @@ export const TaskForm = ({ onCreateTask, projects, selectedDate }: TaskFormProps
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Log Daily Task</CardTitle>
-        <CardDescription>Capture what you need to do today.</CardDescription>
+        <CardTitle>{t("tasks.logTitle")}</CardTitle>
+        <CardDescription>{t("tasks.logSubtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <Label htmlFor="task-title">Task title</Label>
+            <Label htmlFor="task-title">{t("tasks.taskTitle")}</Label>
             <Input
               id="task-title"
-              placeholder="Prepare sprint report"
+              placeholder={t("tasks.taskTitlePlaceholder")}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="task-details">Details</Label>
+            <Label htmlFor="task-details">{t("common.details")}</Label>
             <Textarea
               id="task-details"
-              placeholder="Add context, blockers, and notes..."
+              placeholder={t("tasks.detailsPlaceholder")}
               value={details}
               onChange={(event) => setDetails(event.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="task-project">Project</Label>
+            <Label htmlFor="task-project">{t("common.project")}</Label>
             <Select
               id="task-project"
               value={projectId}
               onChange={(event) => setProjectId(event.target.value)}
             >
-              <option value="none">No project</option>
+              <option value="none">{t("tasks.noProject")}</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
@@ -74,7 +76,7 @@ export const TaskForm = ({ onCreateTask, projects, selectedDate }: TaskFormProps
               ))}
             </Select>
           </div>
-          <Button type="submit">Add task</Button>
+          <Button type="submit">{t("tasks.addTask")}</Button>
         </form>
       </CardContent>
     </Card>

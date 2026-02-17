@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { TaskBoard } from "@/components/tasks/task-board";
 import { TaskForm } from "@/components/tasks/task-form";
 import { TaskList } from "@/components/tasks/task-list";
@@ -9,19 +9,36 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select } from "@/components/ui/select";
 import { projectStore } from "@/stores/project-store";
 import { taskStore } from "@/stores/task-store";
-import type { TaskStatus } from "@/types/task";
+import type { Project } from "@/types/project";
+import type { Task, TaskStatus } from "@/types/task";
 import { format } from "date-fns";
 import { Copy } from "lucide-react";
+import { useI18n } from "@/i18n/i18n";
 
 export const DailyTasksPage = () => {
+  const { t } = useI18n();
   const today = new Date().toISOString().slice(0, 10);
-  const [version, setVersion] = useState(0);
   const [selectedDate, setSelectedDate] = useState(today);
   const [showCompleted, setShowCompleted] = useState(true);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"list" | "board">("list");
-  const tasks = useMemo(() => taskStore.all(), [version]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  const loadData = async () => {
+    const [nextTasks, nextProjects] = await Promise.all([taskStore.all(), projectStore.all()]);
+    setTasks(nextTasks);
+    setProjects(nextProjects);
+  };
+
+  useEffect(() => {
+    loadData().catch(() => {
+      setTasks([]);
+      setProjects([]);
+    });
+  }, []);
+
   const dateTasks = useMemo(
     () => tasks.filter((task) => task.taskDate === selectedDate),
     [tasks, selectedDate],
@@ -35,28 +52,25 @@ export const DailyTasksPage = () => {
       }),
     [dateTasks, statusFilter, projectFilter],
   );
-  const projects = useMemo(() => projectStore.all(), [version]);
 
-  const refresh = () => setVersion((current) => current + 1);
-
-  const handleCreateTask = (
+  const handleCreateTask = async (
     title: string,
     details: string,
     projectId: string | null,
     taskDate: string,
   ) => {
-    taskStore.add(title, details, projectId, taskDate);
-    refresh();
+    await taskStore.add(title, details, projectId, taskDate);
+    await loadData();
   };
 
-  const handleUpdateStatus = (taskId: string, status: TaskStatus) => {
-    taskStore.updateStatus(taskId, status);
-    refresh();
+  const handleUpdateStatus = async (taskId: string, status: TaskStatus) => {
+    await taskStore.updateStatus(taskId, status);
+    await loadData();
   };
 
-  const handleDeleteTask = (taskId: string) => {
-    taskStore.remove(taskId);
-    refresh();
+  const handleDeleteTask = async (taskId: string) => {
+    await taskStore.remove(taskId);
+    await loadData();
   };
 
   const summary = useMemo(() => {
@@ -65,15 +79,15 @@ export const DailyTasksPage = () => {
     const open = dateTasks.filter((task) => task.status === "todo");
 
     const summaryLines = [
-      `Daily Summary - ${format(new Date(selectedDate), "PPP")}`,
+      `${t("tasks.summaryHeading")} - ${format(new Date(selectedDate), "PPP")}`,
       "",
-      `Completed (${completed.length}):`,
+      `${t("tasks.completedHeading")} (${completed.length}):`,
       ...completed.map((task) => `- ${task.title}`),
       "",
-      `In Progress (${inProgress.length}):`,
+      `${t("tasks.inProgressHeading")} (${inProgress.length}):`,
       ...inProgress.map((task) => `- ${task.title}`),
       "",
-      `Open (${open.length}):`,
+      `${t("tasks.openHeading")} (${open.length}):`,
       ...open.map((task) => `- ${task.title}`),
     ];
 
@@ -84,7 +98,6 @@ export const DailyTasksPage = () => {
     try {
       await navigator.clipboard.writeText(summary);
     } catch {
-      // Fallback for older browsers
       const textarea = document.createElement("textarea");
       textarea.value = summary;
       textarea.style.position = "fixed";
@@ -116,10 +129,10 @@ export const DailyTasksPage = () => {
     <div className="space-y-6">
       <section>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Daily Work Tasks
+          {t("tasks.pageTitle")}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Log, update, and complete your tasks every day.
+          {t("tasks.pageSubtitle")}
         </p>
       </section>
       <Card>
@@ -130,7 +143,7 @@ export const DailyTasksPage = () => {
                 className="text-sm font-medium text-foreground"
                 htmlFor="tasks-date"
               >
-                Task date
+                {t("tasks.taskDate")}
               </label>
               <Popover>
                 <PopoverTrigger asChild>
@@ -156,14 +169,14 @@ export const DailyTasksPage = () => {
               </Popover>
             </div>
             <Button variant="secondary" onClick={() => setSelectedDate(today)}>
-              Today
+              {t("common.today")}
             </Button>
             <Button variant="ghost" onClick={() => setShowCompleted((value) => !value)}>
-              {showCompleted ? "Hide completed" : "Show completed"}
+              {showCompleted ? t("tasks.hideCompleted") : t("tasks.showCompleted")}
             </Button>
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="status-filter">
-                Status
+                {t("common.status")}
               </label>
               <Select
                 id="status-filter"
@@ -172,22 +185,22 @@ export const DailyTasksPage = () => {
                   setStatusFilter(event.target.value as TaskStatus | "all")
                 }
               >
-                <option value="all">All</option>
-                <option value="todo">To do</option>
-                <option value="in-progress">In progress</option>
-                <option value="done">Done</option>
+                <option value="all">{t("tasks.all")}</option>
+                <option value="todo">{t("tasks.todo")}</option>
+                <option value="in-progress">{t("tasks.inProgress")}</option>
+                <option value="done">{t("tasks.done")}</option>
               </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="project-filter">
-                Project
+                {t("common.project")}
               </label>
               <Select
                 id="project-filter"
                 value={projectFilter}
                 onChange={(event) => setProjectFilter(event.target.value)}
               >
-                <option value="all">All projects</option>
+                <option value="all">{t("tasks.allProjects")}</option>
                 {projects.map((project) => (
                   <option key={project.id} value={project.id}>
                     {project.name}
@@ -196,21 +209,21 @@ export const DailyTasksPage = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">View</label>
+              <label className="text-sm font-medium text-foreground">{t("common.view")}</label>
               <div className="flex gap-2">
                 <Button
                   variant={viewMode === "list" ? "default" : "secondary"}
                   size="sm"
                   onClick={() => setViewMode("list")}
                 >
-                  List
+                  {t("common.list")}
                 </Button>
                 <Button
                   variant={viewMode === "board" ? "default" : "secondary"}
                   size="sm"
                   onClick={() => setViewMode("board")}
                 >
-                  Board
+                  {t("common.board")}
                 </Button>
               </div>
             </div>
@@ -246,14 +259,14 @@ export const DailyTasksPage = () => {
         <CardContent className="pt-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-foreground">Daily Summary</p>
+              <p className="text-sm font-medium text-foreground">{t("tasks.summaryTitle")}</p>
               <p className="text-xs text-muted-foreground">
-                Copy this into standup or status updates.
+                {t("tasks.summarySubtitle")}
               </p>
             </div>
             <Button variant="secondary" size="sm" onClick={handleCopySummary}>
               <Copy className="mr-1 size-4" />
-              Copy
+              {t("common.copy")}
             </Button>
           </div>
           <pre className="mt-4 whitespace-pre-wrap rounded-lg border border-border bg-card p-4 text-sm text-foreground">
@@ -264,5 +277,3 @@ export const DailyTasksPage = () => {
     </div>
   );
 };
-
-

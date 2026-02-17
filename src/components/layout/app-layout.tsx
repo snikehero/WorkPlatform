@@ -5,10 +5,14 @@ import { useTheme } from "next-themes";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/auth-store";
+import { useI18n } from "@/i18n/i18n";
 
 export const AppLayout = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
-  const userEmail = useAuthStore.getState().userEmail;
+  const authState = useAuthStore.getState();
+  const userEmail = authState.userEmail;
+  const userRole = authState.role;
+  const { t } = useI18n();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
 
@@ -31,9 +35,9 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
           }`}
         >
           <div className="flex h-16 items-center justify-between px-3">
-            <Link to="/tasks" className="inline-flex items-center gap-2 font-semibold text-foreground">
+            <Link to="/dashboard" className="inline-flex items-center gap-2 font-semibold text-foreground">
               <CheckSquare className="size-5 text-sky-500" />
-              {isSidebarOpen ? "Work Platform" : null}
+              {isSidebarOpen ? t("app.name") : null}
             </Link>
             <Button variant="ghost" size="sm" onClick={() => setIsSidebarOpen((open) => !open)}>
               <Menu className="size-4" />
@@ -44,10 +48,22 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
             <div className="space-y-2">
               {isSidebarOpen ? (
                 <p className="text-xs uppercase tracking-wide text-muted-foreground/70">
-                  Personal
+                  {t("nav.personal")}
                 </p>
               ) : null}
               <nav className="space-y-1">
+                <NavLink
+                  to="/dashboard"
+                  className={({ isActive }) =>
+                    `block rounded-md px-2 py-2 text-sm ${
+                      isActive
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`
+                  }
+                >
+                  {t("nav.dailyDashboard")}
+                </NavLink>
                 <NavLink
                   to="/tasks"
                   className={({ isActive }) =>
@@ -58,7 +74,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     }`
                   }
                 >
-                  Tasks
+                  {t("nav.tasks")}
                 </NavLink>
                 <NavLink
                   to="/notes"
@@ -70,7 +86,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     }`
                   }
                 >
-                  Notes
+                  {t("nav.notes")}
                 </NavLink>
                 <NavLink
                   to="/projects"
@@ -82,8 +98,28 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     }`
                   }
                 >
-                  Projects
+                  {t("nav.projects")}
                 </NavLink>
+                <NavLink
+                  to="/account"
+                  className={({ isActive }) =>
+                    `block rounded-md px-2 py-2 text-sm ${
+                      isActive
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`
+                  }
+                >
+                  {t("nav.account")}
+                </NavLink>
+              </nav>
+            </div>
+
+            <div className="space-y-2">
+              {isSidebarOpen ? (
+                <p className="text-xs uppercase tracking-wide text-muted-foreground/70">{t("nav.dashboards")}</p>
+              ) : null}
+              <nav className="space-y-1">
                 <NavLink
                   to="/weekly"
                   className={({ isActive }) =>
@@ -94,18 +130,50 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     }`
                   }
                 >
-                  Weekly
+                  {t("nav.weekly")}
                 </NavLink>
+                {(userRole === "admin" || userRole === "developer") ? (
+                  <>
+                    <NavLink
+                      to="/team-calendar"
+                      className={({ isActive }) =>
+                        `block rounded-md px-2 py-2 text-sm ${
+                          isActive
+                            ? "bg-muted text-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`
+                      }
+                    >
+                      {t("nav.calendar")}
+                    </NavLink>
+                  </>
+                ) : null}
               </nav>
             </div>
 
             <div className="space-y-2">
               {isSidebarOpen ? (
-                <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Team</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground/70">{t("nav.work")}</p>
               ) : null}
               <nav className="space-y-1">
+                {(userRole === "admin" || userRole === "developer") ? (
+                  <>
+                    <NavLink
+                      to="/pc-maintenance"
+                      className={({ isActive }) =>
+                        `block rounded-md px-2 py-2 text-sm ${
+                          isActive
+                            ? "bg-muted text-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`
+                      }
+                    >
+                      {t("nav.pcMaintenance")}
+                    </NavLink>
+                  </>
+                ) : null}
                 <NavLink
-                  to="/team-calendar"
+                  to="/tickets"
                   className={({ isActive }) =>
                     `block rounded-md px-2 py-2 text-sm ${
                       isActive
@@ -114,10 +182,10 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     }`
                   }
                 >
-                  Calendar
+                  {t("nav.tickets")}
                 </NavLink>
                 <NavLink
-                  to="/pc-maintenance"
+                  to="/notifications"
                   className={({ isActive }) =>
                     `block rounded-md px-2 py-2 text-sm ${
                       isActive
@@ -126,10 +194,55 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     }`
                   }
                 >
-                  PC Maintenance
+                  {t("nav.notifications")}
+                </NavLink>
+                <NavLink
+                  to="/knowledge-base"
+                  className={({ isActive }) =>
+                    `block rounded-md px-2 py-2 text-sm ${
+                      isActive
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`
+                  }
+                >
+                  {t("nav.knowledgeBase")}
+                </NavLink>
+                <NavLink
+                  to="/assets"
+                  className={({ isActive }) =>
+                    `block rounded-md px-2 py-2 text-sm ${
+                      isActive
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`
+                  }
+                >
+                  {t("nav.assets")}
                 </NavLink>
               </nav>
             </div>
+            {userRole === "admin" ? (
+              <div className="space-y-2">
+                {isSidebarOpen ? (
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground/70">{t("nav.admin")}</p>
+                ) : null}
+                <nav className="space-y-1">
+                  <NavLink
+                    to="/admin"
+                    className={({ isActive }) =>
+                      `block rounded-md px-2 py-2 text-sm ${
+                        isActive
+                          ? "bg-muted text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`
+                    }
+                  >
+                    {t("nav.dashboard")}
+                  </NavLink>
+                </nav>
+              </div>
+            ) : null}
           </div>
         </aside>
 
@@ -146,11 +259,11 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                   ) : (
                     <Moon className="mr-1 size-4" />
                   )}
-                  {resolvedTheme === "dark" ? "Light" : "Dark"}
+                  {resolvedTheme === "dark" ? t("common.light") : t("common.dark")}
                 </Button>
                 <Button variant="secondary" size="sm" onClick={handleLogout}>
                   <LogOut className="mr-1 size-4" />
-                  Logout
+                  {t("common.logout")}
                 </Button>
               </div>
             </div>

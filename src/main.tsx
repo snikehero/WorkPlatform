@@ -4,11 +4,15 @@ import { RouterProvider } from "react-router-dom";
 import { router } from "@/router";
 import "@/styles/globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { I18nProvider } from "@/i18n/i18n";
+import { useAuthStore } from "@/stores/auth-store";
 
 ReactDOM.createRoot(document.getElementById("app")!).render(
   <React.StrictMode>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <RouterProvider router={router} />
-    </ThemeProvider>
+    <I18nProvider initialLocale={useAuthStore.getState().preferredLanguage}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <RouterProvider router={router} />
+      </ThemeProvider>
+    </I18nProvider>
   </React.StrictMode>
 );

@@ -7,6 +7,14 @@ import { DailyTasksPage } from "@/pages/daily-tasks-page";
 import { WeeklyReviewPage } from "@/pages/weekly-review-page";
 import { TeamCalendarPage } from "@/pages/team-calendar-page";
 import { PcMaintenancePage } from "@/pages/pc-maintenance-page";
+import { AdminDashboardPage } from "@/pages/admin-dashboard-page";
+import { TicketsPage } from "@/pages/tickets-page";
+import { TicketSolutionPage } from "@/pages/ticket-solution-page";
+import { AccountPage } from "@/pages/account-page";
+import { DailyDashboardPage } from "@/pages/daily-dashboard-page";
+import { NotificationsPage } from "@/pages/notifications-page";
+import { KnowledgeBasePage } from "@/pages/knowledge-base-page";
+import { AssetInventoryPage } from "@/pages/asset-inventory-page";
 import { useAuthStore } from "@/stores/auth-store";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -16,13 +24,39 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const PublicOnlyRoute = ({ children }: { children: React.ReactNode }) => {
   const isAuthenticated = useAuthStore.getState().isAuthenticated;
-  return isAuthenticated ? <Navigate to="/tasks" replace /> : children;
+  return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
+};
+
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const auth = useAuthStore.getState();
+  if (!auth.isAuthenticated) return <Navigate to="/login" replace />;
+  return auth.role === "admin" ? children : <Navigate to="/dashboard" replace />;
+};
+
+const TeamRoute = ({ children }: { children: React.ReactNode }) => {
+  const auth = useAuthStore.getState();
+  if (!auth.isAuthenticated) return <Navigate to="/login" replace />;
+  return auth.role === "admin" || auth.role === "developer" ? (
+    children
+  ) : (
+    <Navigate to="/dashboard" replace />
+  );
 };
 
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <Navigate to="/tasks" replace />,
+    element: <Navigate to="/dashboard" replace />,
+  },
+  {
+    path: "/dashboard",
+    element: (
+      <ProtectedRoute>
+        <AppLayout>
+          <DailyDashboardPage />
+        </AppLayout>
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/login",
@@ -75,19 +109,89 @@ export const router = createBrowserRouter([
   {
     path: "/team-calendar",
     element: (
-      <ProtectedRoute>
+      <TeamRoute>
         <AppLayout>
           <TeamCalendarPage />
         </AppLayout>
-      </ProtectedRoute>
+      </TeamRoute>
     ),
   },
   {
     path: "/pc-maintenance",
     element: (
-      <ProtectedRoute>
+      <TeamRoute>
         <AppLayout>
           <PcMaintenancePage />
+        </AppLayout>
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/tickets",
+    element: (
+      <ProtectedRoute>
+        <AppLayout>
+          <TicketsPage />
+        </AppLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/tickets/:ticketId",
+    element: (
+      <TeamRoute>
+        <AppLayout>
+          <TicketSolutionPage />
+        </AppLayout>
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/notifications",
+    element: (
+      <ProtectedRoute>
+        <AppLayout>
+          <NotificationsPage />
+        </AppLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/knowledge-base",
+    element: (
+      <ProtectedRoute>
+        <AppLayout>
+          <KnowledgeBasePage />
+        </AppLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/assets",
+    element: (
+      <ProtectedRoute>
+        <AppLayout>
+          <AssetInventoryPage />
+        </AppLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/admin",
+    element: (
+      <AdminRoute>
+        <AppLayout>
+          <AdminDashboardPage />
+        </AppLayout>
+      </AdminRoute>
+    ),
+  },
+  {
+    path: "/account",
+    element: (
+      <ProtectedRoute>
+        <AppLayout>
+          <AccountPage />
         </AppLayout>
       </ProtectedRoute>
     ),

@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useI18n } from "@/i18n/i18n";
 
 type MaintenanceFormProps = {
+  responsibleName: string;
   onCreateRecord: (input: {
     maintenanceDate: string;
     qr: string;
@@ -22,7 +24,8 @@ type MaintenanceFormProps = {
   }) => void;
 };
 
-export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
+export const MaintenanceForm = ({ responsibleName, onCreateRecord }: MaintenanceFormProps) => {
+  const { t } = useI18n();
   const toUpper = (value: string) => value.toLocaleUpperCase("es-MX");
   const today = new Date().toISOString().slice(0, 10);
   const [maintenanceDate, setMaintenanceDate] = useState(today);
@@ -34,7 +37,6 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
   const [consecutive, setConsecutive] = useState("");
   const [maintenanceType, setMaintenanceType] = useState<"P" | "C">("P");
   const [location, setLocation] = useState("");
-  const [responsibleName, setResponsibleName] = useState("");
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set());
   const [observationsById, setObservationsById] = useState<Record<string, string>>({});
 
@@ -60,7 +62,6 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
     setConsecutive("");
     setMaintenanceType("P");
     setLocation("");
-    setResponsibleName("");
     setSelectedChecks(new Set());
     setObservationsById({});
   };
@@ -101,18 +102,23 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
 
   const hardwareChecks = maintenanceCheckDefinitions.filter((item) => item.category === "hardware");
   const softwareChecks = maintenanceCheckDefinitions.filter((item) => item.category === "software");
+  const getCheckLabel = (checkId: string, fallback: string) => {
+    const labelKey = `maintenance.check.${checkId}`;
+    const translated = t(labelKey);
+    return translated === labelKey ? fallback : translated;
+  };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Nuevo Mantenimiento de PC</CardTitle>
-        <CardDescription>Captura el formato que hoy llevas en Excel.</CardDescription>
+        <CardTitle>{t("maintenance.formTitle")}</CardTitle>
+        <CardDescription>{t("maintenance.formSubtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-5" onSubmit={handleSubmit}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="maintenance-date">Fecha</Label>
+              <Label htmlFor="maintenance-date">{t("maintenance.date")}</Label>
               <Input
                 id="maintenance-date"
                 type="date"
@@ -121,7 +127,7 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="maintenance-qr">QR</Label>
+              <Label htmlFor="maintenance-qr">{t("maintenance.qr")}</Label>
               <Input
                 id="maintenance-qr"
                 value={qr}
@@ -130,7 +136,7 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="maintenance-model">Modelo</Label>
+              <Label htmlFor="maintenance-model">{t("maintenance.model")}</Label>
               <Input
                 id="maintenance-model"
                 value={model}
@@ -139,7 +145,7 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="maintenance-brand">Marca</Label>
+              <Label htmlFor="maintenance-brand">{t("maintenance.brand")}</Label>
               <Input
                 id="maintenance-brand"
                 value={brand}
@@ -148,25 +154,25 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="maintenance-user">Usuario</Label>
+              <Label htmlFor="maintenance-user">{t("maintenance.user")}</Label>
               <Input
                 id="maintenance-user"
                 value={user}
                 onChange={(event) => setUser(toUpper(event.target.value))}
-                placeholder="Nombre del usuario"
+                placeholder={t("maintenance.userPlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="maintenance-serial">No. de Serie</Label>
+              <Label htmlFor="maintenance-serial">{t("maintenance.serialNumber")}</Label>
               <Input
                 id="maintenance-serial"
                 value={serialNumber}
                 onChange={(event) => setSerialNumber(toUpper(event.target.value))}
-                placeholder="Serie del equipo"
+                placeholder={t("maintenance.serialPlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="maintenance-consecutive">Consecutivo</Label>
+              <Label htmlFor="maintenance-consecutive">{t("maintenance.consecutive")}</Label>
               <Input
                 id="maintenance-consecutive"
                 value={consecutive}
@@ -175,7 +181,7 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
               />
             </div>
             <div className="space-y-2">
-              <Label>Tipo (P | C)</Label>
+              <Label>{t("maintenance.type")}</Label>
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -196,28 +202,28 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="maintenance-location">Ubicacion</Label>
+              <Label htmlFor="maintenance-location">{t("maintenance.location")}</Label>
               <Input
                 id="maintenance-location"
                 value={location}
                 onChange={(event) => setLocation(toUpper(event.target.value))}
-                placeholder="Ubicacion fisica"
+                placeholder={t("maintenance.locationPlaceholder")}
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="maintenance-responsible">Nombre responsable de mantenimiento</Label>
+              <Label htmlFor="maintenance-responsible">{t("maintenance.responsible")}</Label>
               <Input
                 id="maintenance-responsible"
                 value={responsibleName}
-                onChange={(event) => setResponsibleName(toUpper(event.target.value))}
-                placeholder="Nombre y firma responsable"
+                readOnly
+                disabled
               />
             </div>
           </div>
 
           <div className="space-y-4">
             <div>
-              <p className="text-sm font-medium text-foreground">Hardware</p>
+              <p className="text-sm font-medium text-foreground">{t("maintenance.hardware")}</p>
               <div className="mt-2 space-y-2">
                 {hardwareChecks.map((item) => (
                   <div key={item.id} className="rounded-md border border-border p-2">
@@ -228,11 +234,11 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
                         onChange={() => toggleCheck(item.id)}
                         className="mt-0.5"
                       />
-                      <span>{item.label}</span>
+                      <span>{getCheckLabel(item.id, item.label)}</span>
                     </label>
                     <Input
                       className="mt-2"
-                      placeholder="Observacion (opcional)"
+                      placeholder={t("maintenance.observationOptional")}
                       value={observationsById[item.id] ?? ""}
                       onChange={(event) =>
                         setObservationsById((current) => ({
@@ -246,7 +252,7 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
               </div>
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">Software</p>
+              <p className="text-sm font-medium text-foreground">{t("maintenance.software")}</p>
               <div className="mt-2 space-y-2">
                 {softwareChecks.map((item) => (
                   <div key={item.id} className="rounded-md border border-border p-2">
@@ -257,11 +263,11 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
                         onChange={() => toggleCheck(item.id)}
                         className="mt-0.5"
                       />
-                      <span>{item.label}</span>
+                      <span>{getCheckLabel(item.id, item.label)}</span>
                     </label>
                     <Input
                       className="mt-2"
-                      placeholder="Observacion (opcional)"
+                      placeholder={t("maintenance.observationOptional")}
                       value={observationsById[item.id] ?? ""}
                       onChange={(event) =>
                         setObservationsById((current) => ({
@@ -276,7 +282,7 @@ export const MaintenanceForm = ({ onCreateRecord }: MaintenanceFormProps) => {
             </div>
           </div>
 
-          <Button type="submit">Guardar mantenimiento</Button>
+          <Button type="submit">{t("maintenance.save")}</Button>
         </form>
       </CardContent>
     </Card>

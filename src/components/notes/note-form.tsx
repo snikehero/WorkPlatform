@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useI18n } from "@/i18n/i18n";
 
 type NoteFormProps = {
   onCreateNote: (title: string, content: string, noteDate: string) => void;
@@ -11,6 +12,7 @@ type NoteFormProps = {
 };
 
 export const NoteForm = ({ onCreateNote, selectedDate }: NoteFormProps) => {
+  const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
 
@@ -25,30 +27,30 @@ export const NoteForm = ({ onCreateNote, selectedDate }: NoteFormProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Daily Note</CardTitle>
-        <CardDescription>Capture decisions, blockers, and quick wins.</CardDescription>
+        <CardTitle>{t("notes.formTitle")}</CardTitle>
+        <CardDescription>{t("notes.formSubtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <Label htmlFor="note-title">Title</Label>
+            <Label htmlFor="note-title">{t("common.title")}</Label>
             <Input
               id="note-title"
-              placeholder="Standup summary"
+              placeholder={t("notes.titlePlaceholder")}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="note-content">Details</Label>
+            <Label htmlFor="note-content">{t("common.details")}</Label>
             <Textarea
               id="note-content"
-              placeholder="What happened today? What needs follow-up?"
+              placeholder={t("notes.detailsPlaceholder")}
               value={content}
               onChange={(event) => setContent(event.target.value)}
             />
           </div>
-          <Button type="submit">Add note</Button>
+          <Button type="submit">{t("notes.addNote")}</Button>
         </form>
       </CardContent>
     </Card>

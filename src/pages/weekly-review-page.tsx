@@ -1,19 +1,37 @@
-import { useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { addWeeks, format, startOfWeek } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { taskStore } from "@/stores/task-store";
 import { noteStore } from "@/stores/note-store";
 import { projectStore } from "@/stores/project-store";
+import type { Task } from "@/types/task";
+import type { Note } from "@/types/note";
+import type { Project } from "@/types/project";
+import { useI18n } from "@/i18n/i18n";
 
 export const WeeklyReviewPage = () => {
+  const { t } = useI18n();
   const [weekOffset, setWeekOffset] = useState(0);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const start = startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 });
   const end = addWeeks(start, 1);
 
-  const tasks = useMemo(() => taskStore.all(), []);
-  const notes = useMemo(() => noteStore.all(), []);
-  const projects = useMemo(() => projectStore.all(), []);
+  useEffect(() => {
+    Promise.all([taskStore.all(), noteStore.all(), projectStore.all()])
+      .then(([nextTasks, nextNotes, nextProjects]) => {
+        setTasks(nextTasks);
+        setNotes(nextNotes);
+        setProjects(nextProjects);
+      })
+      .catch(() => {
+        setTasks([]);
+        setNotes([]);
+        setProjects([]);
+      });
+  }, []);
 
   const weekTasks = useMemo(
     () =>
@@ -46,9 +64,9 @@ export const WeeklyReviewPage = () => {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Weekly Review</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("weekly.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
-          A quick snapshot of your work for the week.
+          {t("weekly.pageSubtitle")}
         </p>
       </section>
 
@@ -56,13 +74,13 @@ export const WeeklyReviewPage = () => {
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="secondary" onClick={() => setWeekOffset((value) => value - 1)}>
-              Previous
+              {t("weekly.previous")}
             </Button>
             <Button variant="secondary" onClick={() => setWeekOffset(0)}>
-              Current week
+              {t("weekly.currentWeek")}
             </Button>
             <Button variant="secondary" onClick={() => setWeekOffset((value) => value + 1)}>
-              Next
+              {t("weekly.next")}
             </Button>
             <span className="text-sm text-muted-foreground">
               {format(start, "MMM d")} - {format(addWeeks(start, 1), "MMM d")}
@@ -74,13 +92,13 @@ export const WeeklyReviewPage = () => {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle>Completed</CardTitle>
-            <CardDescription>{completed.length} task(s)</CardDescription>
+            <CardTitle>{t("tasks.completedHeading")}</CardTitle>
+            <CardDescription>{completed.length} {t("common.taskCount")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 text-sm text-muted-foreground">
               {completed.length === 0 ? (
-                <li>No completed tasks.</li>
+                <li>{t("weekly.completedEmpty")}</li>
               ) : (
                 completed.map((task) => <li key={task.id}>- {task.title}</li>)
               )}
@@ -89,13 +107,13 @@ export const WeeklyReviewPage = () => {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>In Progress</CardTitle>
-            <CardDescription>{inProgress.length} task(s)</CardDescription>
+            <CardTitle>{t("tasks.inProgressHeading")}</CardTitle>
+            <CardDescription>{inProgress.length} {t("common.taskCount")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 text-sm text-muted-foreground">
               {inProgress.length === 0 ? (
-                <li>No tasks in progress.</li>
+                <li>{t("weekly.inProgressEmpty")}</li>
               ) : (
                 inProgress.map((task) => <li key={task.id}>- {task.title}</li>)
               )}
@@ -104,13 +122,13 @@ export const WeeklyReviewPage = () => {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Open</CardTitle>
-            <CardDescription>{open.length} task(s)</CardDescription>
+            <CardTitle>{t("tasks.openHeading")}</CardTitle>
+            <CardDescription>{open.length} {t("common.taskCount")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 text-sm text-muted-foreground">
               {open.length === 0 ? (
-                <li>No open tasks.</li>
+                <li>{t("weekly.openEmpty")}</li>
               ) : (
                 open.map((task) => <li key={task.id}>- {task.title}</li>)
               )}
@@ -122,13 +140,13 @@ export const WeeklyReviewPage = () => {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Notes</CardTitle>
-            <CardDescription>{weekNotes.length} note(s)</CardDescription>
+            <CardTitle>{t("nav.notes")}</CardTitle>
+            <CardDescription>{weekNotes.length} {t("common.noteCount")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 text-sm text-muted-foreground">
               {weekNotes.length === 0 ? (
-                <li>No notes logged.</li>
+                <li>{t("weekly.notesEmpty")}</li>
               ) : (
                 weekNotes.map((note) => (
                   <li key={note.id}>
@@ -141,13 +159,13 @@ export const WeeklyReviewPage = () => {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Projects</CardTitle>
-            <CardDescription>Task counts this week</CardDescription>
+            <CardTitle>{t("nav.projects")}</CardTitle>
+            <CardDescription>{t("weekly.projectsSubtitle")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 text-sm text-muted-foreground">
               {tasksByProject.length === 0 ? (
-                <li>No projects created.</li>
+                <li>{t("weekly.projectsEmpty")}</li>
               ) : (
                 tasksByProject.map((project) => (
                   <li key={project.id}>

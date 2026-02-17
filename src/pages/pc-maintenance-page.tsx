@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -8,25 +8,37 @@ import { MaintenanceForm } from "@/components/maintenance/maintenance-form";
 import { MaintenanceList } from "@/components/maintenance/maintenance-list";
 import { exportMaintenanceRecordToExcel } from "@/lib/maintenance-excel";
 import { maintenanceStore } from "@/stores/maintenance-store";
+import { useAuthStore } from "@/stores/auth-store";
 import type { MaintenanceCheck, MaintenanceRecord } from "@/types/maintenance-record";
+import { useI18n } from "@/i18n/i18n";
 
 export const PcMaintenancePage = () => {
+  const { t } = useI18n();
+  const userEmail = useAuthStore.getState().userEmail ?? "";
+  const responsibleName = userEmail.split("@", 1)[0].toLocaleUpperCase("es-MX");
   const today = new Date().toISOString().slice(0, 10);
-  const [version, setVersion] = useState(0);
   const [selectedDate, setSelectedDate] = useState(today);
   const [templateName, setTemplateName] = useState<string | null>(null);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const records = useMemo(() => maintenanceStore.all(), [version]);
+
+  const loadRecords = async () => {
+    const data = await maintenanceStore.all();
+    setRecords(data);
+  };
+
+  useEffect(() => {
+    loadRecords().catch(() => setRecords([]));
+  }, []);
+
   const filteredRecords = useMemo(
     () => records.filter((record) => record.maintenanceDate === selectedDate),
     [records, selectedDate]
   );
 
-  const refresh = () => setVersion((current) => current + 1);
-
-  const handleCreateRecord = (input: {
+  const handleCreateRecord = async (input: {
     maintenanceDate: string;
     qr: string;
     brand: string;
@@ -39,13 +51,13 @@ export const PcMaintenancePage = () => {
     responsibleName: string;
     checks: MaintenanceCheck[];
   }) => {
-    maintenanceStore.add(input);
-    refresh();
+    await maintenanceStore.add({ ...input, responsibleName });
+    await loadRecords();
   };
 
-  const handleDeleteRecord = (recordId: string) => {
-    maintenanceStore.remove(recordId);
-    refresh();
+  const handleDeleteRecord = async (recordId: string) => {
+    await maintenanceStore.remove(recordId);
+    await loadRecords();
   };
 
   const handleTemplateUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -54,22 +66,22 @@ export const PcMaintenancePage = () => {
 
     setTemplateFile(file);
     setTemplateName(file.name);
-    setExportMessage(`Template loaded: ${file.name}`);
+    setExportMessage(`${t("maintenance.templateLoaded")}: ${file.name}`);
     event.target.value = "";
   };
 
   const handleExportRecord = async (record: MaintenanceRecord) => {
     if (!templateFile) {
-      setExportMessage("Upload your Excel template first.");
+      setExportMessage(t("maintenance.uploadTemplateFirst"));
       return;
     }
 
     try {
       await exportMaintenanceRecordToExcel(record, templateFile);
-      setExportMessage(`Exported ${record.qr || record.serialNumber} to Excel.`);
+      setExportMessage(t("maintenance.exported", { id: record.qr || record.serialNumber }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unexpected export error.";
-      setExportMessage(`Failed to export: ${message}`);
+      const message = error instanceof Error ? error.message : t("maintenance.unexpectedExportError");
+      setExportMessage(`${t("maintenance.exportFailed")}: ${message}`);
     }
   };
 
@@ -92,9 +104,9 @@ export const PcMaintenancePage = () => {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">PC Maintenance</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("maintenance.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
-          Registra mantenimientos con el formato operativo de hardware y software.
+          {t("maintenance.pageSubtitle")}
         </p>
       </section>
 
@@ -103,7 +115,7 @@ export const PcMaintenancePage = () => {
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="maintenance-date-filter">
-                Filter by date
+                {t("maintenance.filterByDate")}
               </label>
               <Popover>
                 <PopoverTrigger asChild>
@@ -126,7 +138,7 @@ export const PcMaintenancePage = () => {
               </Popover>
             </div>
             <Button variant="secondary" onClick={() => setSelectedDate(today)}>
-              Today
+              {t("common.today")}
             </Button>
             <input
               ref={fileInputRef}
@@ -136,17 +148,17 @@ export const PcMaintenancePage = () => {
               onChange={handleTemplateUpload}
             />
             <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
-              {templateName ? "Replace Template" : "Load Excel Template"}
+              {templateName ? t("maintenance.replaceTemplate") : t("maintenance.loadTemplate")}
             </Button>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Template: {templateName ?? "Not loaded"}
+            {t("maintenance.templateLabel")}: {templateName ?? t("maintenance.notLoaded")}
           </p>
           {exportMessage ? <p className="mt-1 text-sm text-muted-foreground">{exportMessage}</p> : null}
         </CardContent>
       </Card>
 
-      <MaintenanceForm onCreateRecord={handleCreateRecord} />
+      <MaintenanceForm responsibleName={responsibleName} onCreateRecord={handleCreateRecord} />
       <MaintenanceList
         records={filteredRecords}
         onDeleteRecord={handleDeleteRecord}

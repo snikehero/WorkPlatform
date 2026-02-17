@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { TeamEvent } from "@/types/team-event";
 import { format } from "date-fns";
+import { useI18n } from "@/i18n/i18n";
 
 type TeamEventListProps = {
   events: TeamEvent[];
@@ -9,15 +10,16 @@ type TeamEventListProps = {
 };
 
 export const TeamEventList = ({ events, onDeleteEvent }: TeamEventListProps) => {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Upcoming Team Events</CardTitle>
-        <CardDescription>Shared team commitments and reminders.</CardDescription>
+        <CardTitle>{t("calendar.pageTitle")}</CardTitle>
+        <CardDescription>{t("calendar.pageSubtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
         {events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No team events scheduled.</p>
+          <p className="text-sm text-muted-foreground">{t("calendar.noEvents")}</p>
         ) : (
           <ul className="space-y-3">
             {events.map((event) => (
@@ -32,12 +34,12 @@ export const TeamEventList = ({ events, onDeleteEvent }: TeamEventListProps) => 
                       <p className="text-sm text-muted-foreground">{event.description}</p>
                     ) : null}
                     <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      {event.owner ? <span>Owner: {event.owner}</span> : null}
-                      {event.location ? <span>Location: {event.location}</span> : null}
+                      {event.owner ? <span>{t("calendar.ownerPrefix")}: {event.owner}</span> : null}
+                      {event.location ? <span>{t("calendar.locationPrefix")}: {event.location}</span> : null}
                     </div>
                   </div>
                   <Button variant="destructive" size="sm" onClick={() => onDeleteEvent(event.id)}>
-                    Delete
+                    {t("common.delete")}
                   </Button>
                 </div>
               </li>

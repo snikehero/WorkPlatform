@@ -1,6 +1,10 @@
-# Maintenance Export API
+# WorkPlatform API
 
-This service exports maintenance records into your Excel template while preserving template design using `openpyxl`.
+This service provides:
+
+- JWT authentication
+- Postgres-backed CRUD APIs for projects, tasks, notes, team events, maintenance records
+- Maintenance Excel export using `openpyxl` while preserving template design
 
 ## Run locally
 
@@ -9,12 +13,19 @@ cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+set DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/workplatform
+set JWT_SECRET=change-me
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+Default seeded admin:
+
+- email: `admin@workplatform.local`
+- password: `123456`
+
 ## Endpoint
 
-- `POST /api/maintenance/export`
+- `POST /api/maintenance/export` (requires auth)
 - multipart form fields:
   - `template`: `.xlsx` or `.xlsm` template file
   - `payload`: JSON string with `MaintenanceRecord` data

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Note } from "@/types/note";
+import { useI18n } from "@/i18n/i18n";
 
 type NoteListProps = {
   notes: Note[];
@@ -8,15 +9,16 @@ type NoteListProps = {
 };
 
 export const NoteList = ({ notes, onDeleteNote }: NoteListProps) => {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Today&apos;s Notes</CardTitle>
-        <CardDescription>Your quick log of the day.</CardDescription>
+        <CardTitle>{t("notes.listTitle")}</CardTitle>
+        <CardDescription>{t("notes.listSubtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
         {notes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No notes yet. Add your first note above.</p>
+          <p className="text-sm text-muted-foreground">{t("notes.empty")}</p>
         ) : (
           <ul className="space-y-3">
             {notes.map((note) => (
@@ -32,7 +34,7 @@ export const NoteList = ({ notes, onDeleteNote }: NoteListProps) => {
                     </p>
                   </div>
                   <Button variant="destructive" size="sm" onClick={() => onDeleteNote(note.id)}>
-                    Delete
+                    {t("common.delete")}
                   </Button>
                 </div>
               </li>

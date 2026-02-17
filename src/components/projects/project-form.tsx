@@ -4,12 +4,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useI18n } from "@/i18n/i18n";
 
 type ProjectFormProps = {
   onCreateProject: (name: string, description: string) => void;
 };
 
 export const ProjectForm = ({ onCreateProject }: ProjectFormProps) => {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
@@ -24,30 +26,30 @@ export const ProjectForm = ({ onCreateProject }: ProjectFormProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>New Project</CardTitle>
-        <CardDescription>Create a bucket for related tasks.</CardDescription>
+        <CardTitle>{t("projects.formTitle")}</CardTitle>
+        <CardDescription>{t("projects.formSubtitle")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <Label htmlFor="project-name">Project name</Label>
+            <Label htmlFor="project-name">{t("projects.name")}</Label>
             <Input
               id="project-name"
-              placeholder="Client launch"
+              placeholder={t("projects.namePlaceholder")}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="project-description">Description</Label>
+            <Label htmlFor="project-description">{t("common.description")}</Label>
             <Textarea
               id="project-description"
-              placeholder="Scope, goals, and key milestones..."
+              placeholder={t("projects.descriptionPlaceholder")}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />
           </div>
-          <Button type="submit">Add project</Button>
+          <Button type="submit">{t("projects.addProject")}</Button>
         </form>
       </CardContent>
     </Card>

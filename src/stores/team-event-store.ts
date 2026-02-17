@@ -1,48 +1,17 @@
+import { apiRequest } from "@/lib/api";
 import type { TeamEvent } from "@/types/team-event";
-import { createId } from "@/lib/id";
-
-const EVENTS_KEY = "workplatform-team-events";
-
-const loadEvents = (): TeamEvent[] => {
-  const raw = localStorage.getItem(EVENTS_KEY);
-  if (!raw) return [];
-
-  try {
-    return JSON.parse(raw) as TeamEvent[];
-  } catch {
-    return [];
-  }
-};
-
-let events: TeamEvent[] = loadEvents();
-
-const saveEvents = () => {
-  localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
-};
 
 export const teamEventStore = {
-  all: () => events,
-  add: (title: string, eventDate: string, description: string, owner: string, location: string) => {
-    const event: TeamEvent = {
-      id: createId(),
-      title,
-      eventDate,
-      description,
-      owner,
-      location,
-      createdAt: new Date().toISOString(),
-    };
-
-    events = [event, ...events];
-    saveEvents();
-    return event;
-  },
-  removeByDate: (eventDate: string) => {
-    events = events.filter((event) => event.eventDate !== eventDate);
-    saveEvents();
-  },
-  remove: (eventId: string) => {
-    events = events.filter((event) => event.id !== eventId);
-    saveEvents();
-  },
+  all: () => apiRequest<TeamEvent[]>("/api/team-events"),
+  add: (title: string, eventDate: string, description: string, owner: string, location: string) =>
+    apiRequest<TeamEvent>("/api/team-events", {
+      method: "POST",
+      body: JSON.stringify({ title, eventDate, description, owner, location }),
+    }),
+  removeByDate: (eventDate: string) =>
+    apiRequest<{ ok: boolean }>(`/api/team-events?eventDate=${encodeURIComponent(eventDate)}`, {
+      method: "DELETE",
+    }),
+  remove: (eventId: string) =>
+    apiRequest<{ ok: boolean }>(`/api/team-events/${eventId}`, { method: "DELETE" }),
 };
