@@ -1,4 +1,5 @@
 import type { TeamEvent } from "@/types/team-event";
+import { createId } from "@/lib/id";
 
 const EVENTS_KEY = "workplatform-team-events";
 
@@ -23,7 +24,7 @@ export const teamEventStore = {
   all: () => events,
   add: (title: string, eventDate: string, description: string, owner: string, location: string) => {
     const event: TeamEvent = {
-      id: crypto.randomUUID(),
+      id: createId(),
       title,
       eventDate,
       description,

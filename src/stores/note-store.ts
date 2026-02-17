@@ -1,4 +1,5 @@
 import type { Note } from "@/types/note";
+import { createId } from "@/lib/id";
 
 const NOTES_KEY = "workplatform-daily-notes";
 
@@ -27,7 +28,7 @@ export const noteStore = {
   all: () => notes,
   add: (title: string, content: string, noteDate: string) => {
     const note: Note = {
-      id: crypto.randomUUID(),
+      id: createId(),
       title,
       content,
       noteDate,

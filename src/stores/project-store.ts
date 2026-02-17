@@ -1,4 +1,5 @@
 import type { Project } from "@/types/project";
+import { createId } from "@/lib/id";
 
 const PROJECTS_KEY = "workplatform-projects";
 
@@ -23,7 +24,7 @@ export const projectStore = {
   all: () => projects,
   add: (name: string, description: string) => {
     const project: Project = {
-      id: crypto.randomUUID(),
+      id: createId(),
       name,
       description,
       createdAt: new Date().toISOString(),

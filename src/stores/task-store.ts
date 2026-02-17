@@ -1,4 +1,5 @@
 import type { Task, TaskStatus } from "@/types/task";
+import { createId } from "@/lib/id";
 
 const TASKS_KEY = "workplatform-daily-tasks";
 
@@ -28,7 +29,7 @@ export const taskStore = {
   all: () => tasks,
   add: (title: string, details: string, projectId: string | null, taskDate: string) => {
     const task: Task = {
-      id: crypto.randomUUID(),
+      id: createId(),
       title,
       details,
       status: "todo",
