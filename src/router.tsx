@@ -5,6 +5,7 @@ import { LoginPage } from "@/pages/login-page";
 import { ProjectsPage } from "@/pages/projects-page";
 import { DailyTasksPage } from "@/pages/daily-tasks-page";
 import { WeeklyReviewPage } from "@/pages/weekly-review-page";
+import { TeamCalendarPage } from "@/pages/team-calendar-page";
 import { useAuthStore } from "@/stores/auth-store";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -66,6 +67,16 @@ export const router = createBrowserRouter([
       <ProtectedRoute>
         <AppLayout>
           <WeeklyReviewPage />
+        </AppLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/team-calendar",
+    element: (
+      <ProtectedRoute>
+        <AppLayout>
+          <TeamCalendarPage />
         </AppLayout>
       </ProtectedRoute>
     ),

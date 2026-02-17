@@ -8,8 +8,8 @@ import { useAuthStore } from "@/stores/auth-store";
 
 export const LoginPage = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("demo@workplatform.dev");
-  const [password, setPassword] = useState("demo123");
+  const [email, setEmail] = useState("admin");
+  const [password, setPassword] = useState("12345");
   const [error, setError] = useState("");
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -17,7 +17,7 @@ export const LoginPage = () => {
     const success = useAuthStore.login(email.trim(), password.trim());
 
     if (!success) {
-      setError("Invalid credentials. Use demo@workplatform.dev / demo123");
+      setError("Invalid credentials. Use admin / 12345");
       return;
     }
 
@@ -34,10 +34,10 @@ export const LoginPage = () => {
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Username</Label>
               <Input
                 id="email"
-                type="email"
+                type="text"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />

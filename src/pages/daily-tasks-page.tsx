@@ -96,6 +96,22 @@ export const DailyTasksPage = () => {
     }
   };
 
+  const calendarClassNames = {
+    months: "flex flex-col space-y-4 sm:flex-row sm:space-x-4 sm:space-y-0",
+    month: "space-y-4",
+    month_caption: "flex items-center justify-center pt-1 relative",
+    caption_label: "text-sm font-medium",
+    nav: "flex items-center justify-between",
+    button_previous: "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100",
+    button_next: "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100",
+    month_grid: "w-full border-collapse space-y-1",
+    weekdays: "flex",
+    weekday: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem] text-center",
+    week: "flex w-full mt-2",
+    day: "h-9 w-9 text-center text-sm p-0 relative",
+    day_button: "h-9 w-9 p-0 font-normal aria-selected:opacity-100",
+  };
+
   return (
     <div className="space-y-6">
       <section>
@@ -132,8 +148,9 @@ export const DailyTasksPage = () => {
                     selected={new Date(selectedDate)}
                     onSelect={(date) => {
                       if (!date) return;
-                      setSelectedDate(date.toISOString().slice(0, 10));
+                      setSelectedDate(format(date, "yyyy-MM-dd"));
                     }}
+                    classNames={calendarClassNames}
                   />
                 </PopoverContent>
               </Popover>

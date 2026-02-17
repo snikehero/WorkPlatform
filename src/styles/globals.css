@@ -55,6 +55,22 @@ body {
   background: radial-gradient(circle at top right, oklch(0.28 0.03 260), transparent 35%), var(--background);
 }
 
+.day-has-event {
+  position: relative;
+}
+
+.day-has-event::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-primary);
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

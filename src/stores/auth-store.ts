@@ -1,5 +1,5 @@
 const AUTH_KEY = "workplatform-auth";
-const DEMO_USER = { email: "demo@workplatform.dev", password: "demo123" };
+const DEMO_USER = { email: "admin", password: "12345" };
 
 type AuthState = {
   isAuthenticated: boolean;
