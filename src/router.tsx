@@ -6,7 +6,7 @@ import { ProjectsPage } from "@/pages/projects-page";
 import { DailyTasksPage } from "@/pages/daily-tasks-page";
 import { WeeklyReviewPage } from "@/pages/weekly-review-page";
 import { TeamCalendarPage } from "@/pages/team-calendar-page";
-import { PcMaintenancePage } from "@/pages/pc-maintenance-page";
+import { AssetMaintenancePage } from "@/pages/asset-maintenance-page";
 import { AdminDashboardPage } from "@/pages/admin-dashboard-page";
 import { TicketsPage } from "@/pages/tickets-page";
 import { TicketSolutionPage } from "@/pages/ticket-solution-page";
@@ -15,6 +15,7 @@ import { DailyDashboardPage } from "@/pages/daily-dashboard-page";
 import { NotificationsPage } from "@/pages/notifications-page";
 import { KnowledgeBasePage } from "@/pages/knowledge-base-page";
 import { AssetInventoryPage } from "@/pages/asset-inventory-page";
+import { AssetListPage } from "@/pages/asset-list-page";
 import { useAuthStore } from "@/stores/auth-store";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -120,8 +121,16 @@ export const router = createBrowserRouter([
     path: "/pc-maintenance",
     element: (
       <TeamRoute>
+        <Navigate to="/asset-maintenance" replace />
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/asset-maintenance",
+    element: (
+      <TeamRoute>
         <AppLayout>
-          <PcMaintenancePage />
+          <AssetMaintenancePage />
         </AppLayout>
       </TeamRoute>
     ),
@@ -159,21 +168,49 @@ export const router = createBrowserRouter([
   {
     path: "/knowledge-base",
     element: (
-      <ProtectedRoute>
+      <TeamRoute>
         <AppLayout>
           <KnowledgeBasePage />
         </AppLayout>
-      </ProtectedRoute>
+      </TeamRoute>
     ),
   },
   {
     path: "/assets",
     element: (
-      <ProtectedRoute>
+      <TeamRoute>
+        <Navigate to="/assets/register" replace />
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/assets/register",
+    element: (
+      <TeamRoute>
         <AppLayout>
           <AssetInventoryPage />
         </AppLayout>
-      </ProtectedRoute>
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/assets/register/:assetId",
+    element: (
+      <TeamRoute>
+        <AppLayout>
+          <AssetInventoryPage />
+        </AppLayout>
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/assets/list",
+    element: (
+      <TeamRoute>
+        <AppLayout>
+          <AssetListPage />
+        </AppLayout>
+      </TeamRoute>
     ),
   },
   {

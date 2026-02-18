@@ -1,5 +1,6 @@
-﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { format } from "date-fns";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,8 +13,24 @@ import { useAuthStore } from "@/stores/auth-store";
 import type { MaintenanceCheck, MaintenanceRecord } from "@/types/maintenance-record";
 import { useI18n } from "@/i18n/i18n";
 
-export const PcMaintenancePage = () => {
+type MaintenancePrefillState = {
+  prefill?: {
+    qr?: string;
+    brand?: string;
+    model?: string;
+    user?: string;
+    serialNumber?: string;
+    consecutive?: string;
+    maintenanceType?: "P" | "C";
+    location?: string;
+  };
+};
+
+export const AssetMaintenancePage = () => {
   const { t } = useI18n();
+  const location = useLocation();
+  const navigationState = (location.state as MaintenancePrefillState | null) ?? null;
+  const prefill = navigationState?.prefill ?? null;
   const userEmail = useAuthStore.getState().userEmail ?? "";
   const responsibleName = userEmail.split("@", 1)[0].toLocaleUpperCase("es-MX");
   const today = new Date().toISOString().slice(0, 10);
@@ -158,7 +175,7 @@ export const PcMaintenancePage = () => {
         </CardContent>
       </Card>
 
-      <MaintenanceForm responsibleName={responsibleName} onCreateRecord={handleCreateRecord} />
+      <MaintenanceForm responsibleName={responsibleName} initialValues={prefill} onCreateRecord={handleCreateRecord} />
       <MaintenanceList
         records={filteredRecords}
         onDeleteRecord={handleDeleteRecord}
@@ -168,3 +185,4 @@ export const PcMaintenancePage = () => {
     </div>
   );
 };
+

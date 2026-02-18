@@ -1,48 +1,81 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { assetStore } from "@/stores/asset-store";
 import type { Asset, AssetStatus } from "@/types/asset";
 import { useI18n } from "@/i18n/i18n";
 
 type AssetDraft = {
   assetTag: string;
-  name: string;
-  category: string;
-  status: AssetStatus;
-  assignedTo: string;
-  serialNumber: string;
+  qrCode: string;
   location: string;
-  purchaseDate: string;
-  warrantyUntil: string;
-  notes: string;
+  serialNumber: string;
+  category: string;
+  manufacturer: string;
+  model: string;
+  supplier: string;
+  status: AssetStatus;
+  user: string;
+  condition: string;
+};
+
+const LOCATION_OPTIONS = [
+  "Francisco Tres Guerras #230",
+  "Francisco de P. Mariel #120",
+  "BMW G.O",
+  "Guadalajara",
+];
+
+const CATEGORY_OPTIONS = [
+  "Desktop",
+  "Laptop",
+  "Servidor",
+  "Impresora",
+  "Mouse",
+  "Teclado",
+  "Monitor",
+  "HDD",
+  "WebCam",
+];
+
+const getNextAssetTag = (items: Asset[]) => {
+  let highest = 0;
+  for (const item of items) {
+    const match = /^TDC-(\d{4,})$/i.exec(item.assetTag.trim());
+    if (!match) continue;
+    const value = Number.parseInt(match[1], 10);
+    if (Number.isFinite(value) && value > highest) highest = value;
+  }
+  return `TDC-${String(highest + 1).padStart(4, "0")}`;
 };
 
 const EMPTY_DRAFT: AssetDraft = {
   assetTag: "",
-  name: "",
-  category: "",
-  status: "active",
-  assignedTo: "",
-  serialNumber: "",
+  qrCode: "",
   location: "",
-  purchaseDate: "",
-  warrantyUntil: "",
-  notes: "",
+  serialNumber: "",
+  category: "",
+  manufacturer: "",
+  model: "",
+  supplier: "",
+  status: "active",
+  user: "",
+  condition: "",
 };
 
 export const AssetInventoryPage = () => {
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const { assetId } = useParams<{ assetId: string }>();
+  const isEditMode = Boolean(assetId);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AssetDraft>(EMPTY_DRAFT);
+  const nextAssetTag = useMemo(() => getNextAssetTag(assets), [assets]);
 
   const loadAssets = async () => {
     const data = await assetStore.all();
@@ -53,112 +86,138 @@ export const AssetInventoryPage = () => {
     loadAssets().catch(() => setAssets([]));
   }, []);
 
-  const filteredAssets = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return assets;
-    return assets.filter((item) =>
-      [item.assetTag, item.name, item.category, item.status, item.assignedTo, item.serialNumber, item.location]
-        .join(" ")
-        .toLowerCase()
-        .includes(term)
-    );
-  }, [assets, search]);
+  useEffect(() => {
+    if (isEditMode) return;
+    setDraft((current) => ({ ...current, assetTag: nextAssetTag }));
+  }, [isEditMode, nextAssetTag]);
 
-  const resetForm = () => {
-    setActiveId(null);
-    setDraft(EMPTY_DRAFT);
-  };
-
-  const handleEdit = (item: Asset) => {
-    setActiveId(item.id);
+  useEffect(() => {
+    if (!isEditMode || !assetId) return;
+    const item = assets.find((asset) => asset.id === assetId);
+    if (!item) return;
     setDraft({
       assetTag: item.assetTag,
-      name: item.name,
-      category: item.category,
-      status: item.status,
-      assignedTo: item.assignedTo,
-      serialNumber: item.serialNumber,
+      qrCode: item.qrCode,
       location: item.location,
-      purchaseDate: item.purchaseDate ?? "",
-      warrantyUntil: item.warrantyUntil ?? "",
-      notes: item.notes,
+      serialNumber: item.serialNumber,
+      category: item.category,
+      manufacturer: item.manufacturer,
+      model: item.model,
+      supplier: item.supplier,
+      status: item.status,
+      user: item.user,
+      condition: item.condition,
     });
-    setMessage(null);
+  }, [assetId, assets, isEditMode]);
+
+  const resetForm = () => {
+    if (isEditMode) {
+      navigate("/assets/list");
+      return;
+    }
+    setDraft({ ...EMPTY_DRAFT, assetTag: nextAssetTag });
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setMessage(null);
-    if (!draft.assetTag.trim() || !draft.name.trim()) {
+    if (!draft.assetTag.trim()) {
       setMessage(t("assets.requiredFields"));
       return;
     }
 
-    const payload = {
-      ...draft,
-      purchaseDate: draft.purchaseDate.trim() ? draft.purchaseDate.trim() : null,
-      warrantyUntil: draft.warrantyUntil.trim() ? draft.warrantyUntil.trim() : null,
-    };
+    const payload = { ...draft };
 
     try {
-      if (activeId) {
-        await assetStore.update(activeId, payload);
+      if (isEditMode && assetId) {
+        await assetStore.update(assetId, payload);
         setMessage(t("assets.updated"));
       } else {
         await assetStore.add(payload);
         setMessage(t("assets.created"));
       }
-      resetForm();
+      if (isEditMode) {
+        navigate("/assets/list");
+      } else {
+        resetForm();
+      }
       await loadAssets();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t("assets.saveFailed"));
     }
   };
 
-  const handleDelete = async (assetId: string) => {
-    await assetStore.remove(assetId);
-    if (activeId === assetId) resetForm();
-    await loadAssets();
-  };
-
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("assets.pageTitle")}</h1>
-        <p className="text-sm text-muted-foreground">{t("assets.pageSubtitle")}</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          {isEditMode ? t("assets.editTitle") : t("assets.registerPageTitle")}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {isEditMode ? t("assets.formSubtitle") : t("assets.registerPageSubtitle")}
+        </p>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{activeId ? t("assets.editTitle") : t("assets.createTitle")}</CardTitle>
-            <CardDescription>{t("assets.formSubtitle")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
+      <Card>
+        <CardHeader>
+          <CardTitle>{isEditMode ? t("assets.editTitle") : t("assets.createTitle")}</CardTitle>
+          <CardDescription>{t("assets.formSubtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
               <div className="space-y-2">
                 <Label htmlFor="asset-tag">{t("assets.assetTag")}</Label>
                 <Input
                   id="asset-tag"
                   value={draft.assetTag}
-                  onChange={(event) => setDraft((current) => ({ ...current, assetTag: event.target.value }))}
+                  readOnly
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="asset-name">{t("common.title")}</Label>
+                <Label htmlFor="asset-qr-code">{t("assets.qrCode")}</Label>
                 <Input
-                  id="asset-name"
-                  value={draft.name}
-                  onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+                  id="asset-qr-code"
+                  value={draft.qrCode}
+                  onChange={(event) => setDraft((current) => ({ ...current, qrCode: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="asset-location">{t("common.location")}</Label>
+                <Select
+                  id="asset-location"
+                  value={draft.location}
+                  onChange={(event) => setDraft((current) => ({ ...current, location: event.target.value }))}
+                >
+                  <option value=""></option>
+                  {LOCATION_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="asset-serial">{t("assets.serialNumber")}</Label>
+                <Input
+                  id="asset-serial"
+                  value={draft.serialNumber}
+                  onChange={(event) => setDraft((current) => ({ ...current, serialNumber: event.target.value }))}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="asset-category">{t("common.category")}</Label>
-                <Input
+                <Select
                   id="asset-category"
                   value={draft.category}
                   onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
-                />
+                >
+                  <option value=""></option>
+                  {CATEGORY_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="asset-status">{t("common.status")}</Label>
@@ -174,116 +233,55 @@ export const AssetInventoryPage = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="asset-assigned">{t("assets.assignedTo")}</Label>
+                <Label htmlFor="asset-manufacturer">{t("assets.manufacturer")}</Label>
                 <Input
-                  id="asset-assigned"
-                  value={draft.assignedTo}
-                  onChange={(event) => setDraft((current) => ({ ...current, assignedTo: event.target.value }))}
+                  id="asset-manufacturer"
+                  value={draft.manufacturer}
+                  onChange={(event) => setDraft((current) => ({ ...current, manufacturer: event.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="asset-serial">{t("assets.serialNumber")}</Label>
+                <Label htmlFor="asset-model">{t("assets.model")}</Label>
                 <Input
-                  id="asset-serial"
-                  value={draft.serialNumber}
-                  onChange={(event) => setDraft((current) => ({ ...current, serialNumber: event.target.value }))}
+                  id="asset-model"
+                  value={draft.model}
+                  onChange={(event) => setDraft((current) => ({ ...current, model: event.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="asset-location">{t("common.location")}</Label>
+                <Label htmlFor="asset-supplier">{t("assets.supplier")}</Label>
                 <Input
-                  id="asset-location"
-                  value={draft.location}
-                  onChange={(event) => setDraft((current) => ({ ...current, location: event.target.value }))}
+                  id="asset-supplier"
+                  value={draft.supplier}
+                  onChange={(event) => setDraft((current) => ({ ...current, supplier: event.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="asset-purchase">{t("assets.purchaseDate")}</Label>
+                <Label htmlFor="asset-user">{t("assets.user")}</Label>
                 <Input
-                  id="asset-purchase"
-                  type="date"
-                  value={draft.purchaseDate}
-                  onChange={(event) => setDraft((current) => ({ ...current, purchaseDate: event.target.value }))}
+                  id="asset-user"
+                  value={draft.user}
+                  onChange={(event) => setDraft((current) => ({ ...current, user: event.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="asset-warranty">{t("assets.warrantyUntil")}</Label>
+                <Label htmlFor="asset-condition">{t("assets.condition")}</Label>
                 <Input
-                  id="asset-warranty"
-                  type="date"
-                  value={draft.warrantyUntil}
-                  onChange={(event) => setDraft((current) => ({ ...current, warrantyUntil: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="asset-notes">{t("common.details")}</Label>
-                <Textarea
-                  id="asset-notes"
-                  value={draft.notes}
-                  onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
+                  id="asset-condition"
+                  value={draft.condition}
+                  onChange={(event) => setDraft((current) => ({ ...current, condition: event.target.value }))}
                 />
               </div>
               <div className="flex flex-wrap gap-2 sm:col-span-2">
-                <Button type="submit">{activeId ? t("common.save") : t("assets.create")}</Button>
-                {activeId ? (
-                  <Button type="button" variant="secondary" onClick={resetForm}>
-                    {t("assets.cancelEdit")}
-                  </Button>
-                ) : null}
+                <Button type="submit">{isEditMode ? t("common.save") : t("assets.create")}</Button>
+                <Button type="button" variant="secondary" onClick={resetForm}>
+                  {isEditMode ? t("assets.cancelEdit") : t("common.clear")}
+                </Button>
               </div>
-            </form>
-            {message ? <p className="mt-3 text-sm text-muted-foreground">{message}</p> : null}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("assets.inventoryTitle")}</CardTitle>
-            <CardDescription>{t("assets.inventorySubtitle")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-3">
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t("assets.searchPlaceholder")}
-              />
-            </div>
-            {filteredAssets.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("assets.empty")}</p>
-            ) : (
-              <ul className="space-y-3">
-                {filteredAssets.map((item) => (
-                  <li key={item.id} className="rounded-md border border-border bg-card p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{item.assetTag} - {item.name}</p>
-                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          {item.category ? <span>{item.category}</span> : null}
-                          {item.location ? <span>{item.location}</span> : null}
-                        </div>
-                        <div className="mt-2">
-                          <Badge variant={item.status === "active" ? "success" : item.status === "maintenance" ? "warning" : "neutral"}>
-                            {t(`assets.status.${item.status}`)}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant="secondary" size="sm" onClick={() => handleEdit(item)}>
-                          {t("assets.edit")}
-                        </Button>
-                        <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)}>
-                          {t("common.delete")}
-                        </Button>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          </form>
+          {message ? <p className="mt-3 text-sm text-muted-foreground">{message}</p> : null}
+        </CardContent>
+      </Card>
     </div>
   );
 };

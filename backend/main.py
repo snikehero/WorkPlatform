@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
@@ -177,15 +178,23 @@ class Asset(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     owner_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
     asset_tag: Mapped[str] = mapped_column(String(120))
+    # Legacy field kept for backward-compatible inserts/updates on existing databases.
     name: Mapped[str] = mapped_column(String(250))
-    category: Mapped[str] = mapped_column(String(80), default="")
-    status: Mapped[str] = mapped_column(String(30), default="active")
-    assigned_to: Mapped[str] = mapped_column(String(250), default="")
-    serial_number: Mapped[str] = mapped_column(String(250), default="")
+    qr_code: Mapped[str] = mapped_column(String(250), default="")
     location: Mapped[str] = mapped_column(String(250), default="")
+    serial_number: Mapped[str] = mapped_column(String(250), default="")
+    category: Mapped[str] = mapped_column(String(80), default="")
+    manufacturer: Mapped[str] = mapped_column(String(120), default="")
+    model: Mapped[str] = mapped_column(String(120), default="")
+    supplier: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(30), default="active")
+    # Legacy fields kept for backward-compatible inserts/updates on existing databases.
+    assigned_to: Mapped[str] = mapped_column(String(250), default="")
     purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     warranty_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
+    user_name: Mapped[str] = mapped_column(String(250), default="")
+    condition: Mapped[str] = mapped_column(String(120), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
@@ -465,30 +474,32 @@ class KnowledgeArticleOut(BaseModel):
 
 
 class AssetIn(BaseModel):
-    assetTag: str
-    name: str
-    category: str = ""
-    status: str = "active"
-    assignedTo: str = ""
-    serialNumber: str = ""
+    assetTag: str = ""
+    qrCode: str = ""
     location: str = ""
-    purchaseDate: str | None = None
-    warrantyUntil: str | None = None
-    notes: str = ""
+    serialNumber: str = ""
+    category: str = ""
+    manufacturer: str = ""
+    model: str = ""
+    supplier: str = ""
+    status: str = "active"
+    user: str = ""
+    condition: str = ""
 
 
 class AssetOut(BaseModel):
     id: str
     assetTag: str
-    name: str
-    category: str
-    status: str
-    assignedTo: str
-    serialNumber: str
+    qrCode: str
     location: str
-    purchaseDate: str | None
-    warrantyUntil: str | None
-    notes: str
+    serialNumber: str
+    category: str
+    manufacturer: str
+    model: str
+    supplier: str
+    status: str
+    user: str
+    condition: str
     createdAt: str
     updatedAt: str
 
@@ -537,6 +548,20 @@ def serialize_tags(items: list[str]) -> str:
         seen.add(lowered)
         normalized.append(value)
     return ",".join(normalized)
+
+
+def build_next_asset_tag(db: Session) -> str:
+    tags = db.scalars(select(Asset.asset_tag)).all()
+    highest = 0
+    pattern = re.compile(r"^TDC-(\d{4,})$", re.IGNORECASE)
+    for tag in tags:
+        match = pattern.match((tag or "").strip())
+        if not match:
+            continue
+        value = int(match.group(1))
+        if value > highest:
+            highest = value
+    return f"TDC-{highest + 1:04d}"
 
 
 def normalize_login_identity(value: str) -> str:
@@ -704,15 +729,16 @@ def asset_to_out(asset: Asset) -> AssetOut:
     return AssetOut(
         id=asset.id,
         assetTag=asset.asset_tag,
-        name=asset.name,
-        category=asset.category,
-        status=asset.status,
-        assignedTo=asset.assigned_to,
-        serialNumber=asset.serial_number,
+        qrCode=asset.qr_code,
         location=asset.location,
-        purchaseDate=asset.purchase_date.isoformat() if asset.purchase_date else None,
-        warrantyUntil=asset.warranty_until.isoformat() if asset.warranty_until else None,
-        notes=asset.notes,
+        serialNumber=asset.serial_number,
+        category=asset.category,
+        manufacturer=asset.manufacturer,
+        model=asset.model,
+        supplier=asset.supplier,
+        status=asset.status,
+        user=asset.user_name,
+        condition=asset.condition,
         createdAt=to_iso(asset.created_at),
         updatedAt=to_iso(asset.updated_at),
     )
@@ -736,6 +762,12 @@ def on_startup():
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'help'"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS process_notes TEXT DEFAULT ''"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '[]'"))
+        conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS qr_code VARCHAR(250) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS manufacturer VARCHAR(120) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS model VARCHAR(120) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS supplier VARCHAR(120) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS user_name VARCHAR(250) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS condition VARCHAR(120) DEFAULT ''"))
     with SessionLocal() as db:
         existing = db.scalar(select(User).where(User.email == "admin@workplatform.local"))
         if not existing:
@@ -1047,17 +1079,16 @@ def delete_notification(notification_id: str, current_user: User = Depends(get_c
 
 
 @app.get("/api/knowledge-base", response_model=list[KnowledgeArticleOut])
-def list_knowledge_articles(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_knowledge_articles(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
     articles = db.scalars(
         select(KnowledgeArticle)
-        .where(KnowledgeArticle.owner_id == current_user.id)
         .order_by(KnowledgeArticle.updated_at.desc())
     ).all()
     return [article_to_out(item) for item in articles]
 
 
 @app.post("/api/knowledge-base", response_model=KnowledgeArticleOut)
-def create_knowledge_article(payload: KnowledgeArticleIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_knowledge_article(payload: KnowledgeArticleIn, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
     article = KnowledgeArticle(
         owner_id=current_user.id,
         title=payload.title.strip(),
@@ -1075,12 +1106,10 @@ def create_knowledge_article(payload: KnowledgeArticleIn, current_user: User = D
 def update_knowledge_article(
     article_id: str,
     payload: KnowledgeArticleIn,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer_or_admin),
     db: Session = Depends(get_db),
 ):
-    article = db.scalar(
-        select(KnowledgeArticle).where(KnowledgeArticle.id == article_id, KnowledgeArticle.owner_id == current_user.id)
-    )
+    article = db.scalar(select(KnowledgeArticle).where(KnowledgeArticle.id == article_id))
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
     article.title = payload.title.strip()
@@ -1094,10 +1123,8 @@ def update_knowledge_article(
 
 
 @app.delete("/api/knowledge-base/{article_id}")
-def delete_knowledge_article(article_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    article = db.scalar(
-        select(KnowledgeArticle).where(KnowledgeArticle.id == article_id, KnowledgeArticle.owner_id == current_user.id)
-    )
+def delete_knowledge_article(article_id: str, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+    article = db.scalar(select(KnowledgeArticle).where(KnowledgeArticle.id == article_id))
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
     db.delete(article)
@@ -1107,7 +1134,10 @@ def delete_knowledge_article(article_id: str, current_user: User = Depends(get_c
 
 @app.get("/api/assets", response_model=list[AssetOut])
 def list_assets(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    items = db.scalars(select(Asset).where(Asset.owner_id == current_user.id).order_by(Asset.updated_at.desc())).all()
+    if current_user.role in (UserRole.admin.value, UserRole.developer.value):
+        items = db.scalars(select(Asset).order_by(Asset.updated_at.desc())).all()
+    else:
+        items = db.scalars(select(Asset).where(Asset.owner_id == current_user.id).order_by(Asset.updated_at.desc())).all()
     return [asset_to_out(item) for item in items]
 
 
@@ -1117,18 +1147,25 @@ def create_asset(payload: AssetIn, current_user: User = Depends(get_current_user
     if status_value not in ("active", "maintenance", "retired", "lost"):
         raise HTTPException(status_code=400, detail="status must be active|maintenance|retired|lost")
 
+    generated_tag = build_next_asset_tag(db)
     item = Asset(
         owner_id=current_user.id,
-        asset_tag=payload.assetTag.strip().upper(),
-        name=payload.name.strip(),
-        category=payload.category.strip(),
-        status=status_value,
-        assigned_to=payload.assignedTo.strip(),
-        serial_number=payload.serialNumber.strip().upper(),
+        asset_tag=generated_tag,
+        name=payload.model.strip() or payload.serialNumber.strip().upper() or generated_tag,
+        qr_code=payload.qrCode.strip(),
         location=payload.location.strip(),
-        purchase_date=parse_optional_date(payload.purchaseDate),
-        warranty_until=parse_optional_date(payload.warrantyUntil),
-        notes=payload.notes.strip(),
+        serial_number=payload.serialNumber.strip().upper(),
+        category=payload.category.strip(),
+        manufacturer=payload.manufacturer.strip(),
+        model=payload.model.strip(),
+        supplier=payload.supplier.strip(),
+        status=status_value,
+        assigned_to=payload.user.strip(),
+        purchase_date=None,
+        warranty_until=None,
+        notes=payload.condition.strip(),
+        user_name=payload.user.strip(),
+        condition=payload.condition.strip(),
     )
     db.add(item)
     db.commit()
@@ -1138,7 +1175,10 @@ def create_asset(payload: AssetIn, current_user: User = Depends(get_current_user
 
 @app.patch("/api/assets/{asset_id}", response_model=AssetOut)
 def update_asset(asset_id: str, payload: AssetIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    item = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.owner_id == current_user.id))
+    if current_user.role in (UserRole.admin.value, UserRole.developer.value):
+        item = db.scalar(select(Asset).where(Asset.id == asset_id))
+    else:
+        item = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.owner_id == current_user.id))
     if not item:
         raise HTTPException(status_code=404, detail="Asset not found")
 
@@ -1146,16 +1186,21 @@ def update_asset(asset_id: str, payload: AssetIn, current_user: User = Depends(g
     if status_value not in ("active", "maintenance", "retired", "lost"):
         raise HTTPException(status_code=400, detail="status must be active|maintenance|retired|lost")
 
-    item.asset_tag = payload.assetTag.strip().upper()
-    item.name = payload.name.strip()
-    item.category = payload.category.strip()
-    item.status = status_value
-    item.assigned_to = payload.assignedTo.strip()
-    item.serial_number = payload.serialNumber.strip().upper()
+    item.name = payload.model.strip() or payload.serialNumber.strip().upper() or item.asset_tag
+    item.qr_code = payload.qrCode.strip()
     item.location = payload.location.strip()
-    item.purchase_date = parse_optional_date(payload.purchaseDate)
-    item.warranty_until = parse_optional_date(payload.warrantyUntil)
-    item.notes = payload.notes.strip()
+    item.serial_number = payload.serialNumber.strip().upper()
+    item.category = payload.category.strip()
+    item.manufacturer = payload.manufacturer.strip()
+    item.model = payload.model.strip()
+    item.supplier = payload.supplier.strip()
+    item.status = status_value
+    item.assigned_to = payload.user.strip()
+    item.purchase_date = None
+    item.warranty_until = None
+    item.notes = payload.condition.strip()
+    item.user_name = payload.user.strip()
+    item.condition = payload.condition.strip()
     item.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(item)
@@ -1164,7 +1209,10 @@ def update_asset(asset_id: str, payload: AssetIn, current_user: User = Depends(g
 
 @app.delete("/api/assets/{asset_id}")
 def delete_asset(asset_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    item = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.owner_id == current_user.id))
+    if current_user.role in (UserRole.admin.value, UserRole.developer.value):
+        item = db.scalar(select(Asset).where(Asset.id == asset_id))
+    else:
+        item = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.owner_id == current_user.id))
     if not item:
         raise HTTPException(status_code=404, detail="Asset not found")
     db.delete(item)
@@ -1386,6 +1434,16 @@ def _sanitize_token(value: str) -> str:
     return "".join(ch for ch in source if ch.isalnum() or ch == "-")
 
 
+def _normalize_consecutive_4(value: str) -> str:
+    source = _normalize_upper(value)
+    if source.startswith("TDC-"):
+        source = source[4:]
+    digits = "".join(ch for ch in source if ch.isdigit())
+    if not digits:
+        return "0000"
+    return digits.zfill(4)[-4:]
+
+
 @app.post("/api/maintenance/export")
 async def export_maintenance(
     template: UploadFile = File(...),
@@ -1490,7 +1548,7 @@ async def export_maintenance(
     file_brand = _sanitize_token(brand) or "NA"
     file_model = _sanitize_token(model) or "NA"
     file_serial = _sanitize_token(serial_number) or "NA"
-    file_consecutive = _sanitize_token(consecutive) or "0000"
+    file_consecutive = _normalize_consecutive_4(consecutive)
     extension = ".xlsm" if lower_name.endswith(".xlsm") else ".xlsx"
     filename = f"TDC-{file_brand}_{file_model}_{file_serial}_{file_consecutive}{maintenance_type}{extension}"
     encoded_filename = quote(filename)

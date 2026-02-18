@@ -23,6 +23,13 @@ const sanitizeToken = (value: string) =>
     .toLocaleUpperCase("es-MX")
     .replace(/[^A-Z0-9-]/g, "");
 
+const normalizeConsecutive4 = (value: string) => {
+  const source = value.toLocaleUpperCase("es-MX").replace(/^TDC-/, "");
+  const digits = source.replace(/\D/g, "");
+  if (!digits) return "0000";
+  return digits.padStart(4, "0").slice(-4);
+};
+
 const downloadBlob = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -85,7 +92,7 @@ export const exportMaintenanceRecordToExcel = async (
   const brand = sanitizeToken(record.brand) || "NA";
   const model = sanitizeToken(record.model) || "NA";
   const serial = sanitizeToken(record.serialNumber) || "NA";
-  const consecutive = sanitizeToken(record.consecutive) || "0000";
+  const consecutive = normalizeConsecutive4(record.consecutive);
   const type = record.maintenanceType === "C" ? "C" : "P";
   const fallback = `TDC-${brand}_${model}_${serial}_${consecutive}${type}${extension}`;
   const filename = resolveFilename(response.headers.get("content-disposition"), fallback);

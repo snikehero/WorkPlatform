@@ -3,15 +3,16 @@ import type { Asset, AssetStatus } from "@/types/asset";
 
 type AssetPayload = {
   assetTag: string;
-  name: string;
-  category: string;
-  status: AssetStatus;
-  assignedTo: string;
-  serialNumber: string;
+  qrCode: string;
   location: string;
-  purchaseDate: string | null;
-  warrantyUntil: string | null;
-  notes: string;
+  serialNumber: string;
+  category: string;
+  manufacturer: string;
+  model: string;
+  supplier: string;
+  status: AssetStatus;
+  user: string;
+  condition: string;
 };
 
 export const assetStore = {

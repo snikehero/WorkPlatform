@@ -1,4 +1,4 @@
-﻿import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createMaintenanceChecks, maintenanceCheckDefinitions } from "@/lib/maintenance-checks";
 import type { MaintenanceCheck } from "@/types/maintenance-record";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,16 @@ import { useI18n } from "@/i18n/i18n";
 
 type MaintenanceFormProps = {
   responsibleName: string;
+  initialValues?: {
+    qr?: string;
+    brand?: string;
+    model?: string;
+    user?: string;
+    serialNumber?: string;
+    consecutive?: string;
+    maintenanceType?: "P" | "C";
+    location?: string;
+  } | null;
   onCreateRecord: (input: {
     maintenanceDate: string;
     qr: string;
@@ -24,7 +34,7 @@ type MaintenanceFormProps = {
   }) => void;
 };
 
-export const MaintenanceForm = ({ responsibleName, onCreateRecord }: MaintenanceFormProps) => {
+export const MaintenanceForm = ({ responsibleName, initialValues, onCreateRecord }: MaintenanceFormProps) => {
   const { t } = useI18n();
   const toUpper = (value: string) => value.toLocaleUpperCase("es-MX");
   const today = new Date().toISOString().slice(0, 10);
@@ -39,6 +49,18 @@ export const MaintenanceForm = ({ responsibleName, onCreateRecord }: Maintenance
   const [location, setLocation] = useState("");
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set());
   const [observationsById, setObservationsById] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!initialValues) return;
+    setQr(toUpper(initialValues.qr ?? ""));
+    setBrand(toUpper(initialValues.brand ?? ""));
+    setModel(toUpper(initialValues.model ?? ""));
+    setUser(toUpper(initialValues.user ?? ""));
+    setSerialNumber(toUpper(initialValues.serialNumber ?? ""));
+    setConsecutive(toUpper(initialValues.consecutive ?? ""));
+    setMaintenanceType(initialValues.maintenanceType ?? "P");
+    setLocation(toUpper(initialValues.location ?? ""));
+  }, [initialValues]);
 
   const toggleCheck = (checkId: string) => {
     setSelectedChecks((current) => {
@@ -288,3 +310,4 @@ export const MaintenanceForm = ({ responsibleName, onCreateRecord }: Maintenance
     </Card>
   );
 };
+
