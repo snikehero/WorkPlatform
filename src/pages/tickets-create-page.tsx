@@ -5,12 +5,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { ticketStore } from "@/stores/ticket-store";
 import type { TicketCategory, TicketPriority } from "@/types/ticket";
 import { useI18n } from "@/i18n/i18n";
 
 export const TicketsCreatePage = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<TicketCategory>("help");
@@ -21,7 +23,9 @@ export const TicketsCreatePage = () => {
     event.preventDefault();
     setMessage(null);
     if (!title.trim()) {
-      setMessage(t("tickets.requiredTitle"));
+      const errorMessage = t("tickets.requiredTitle");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
       return;
     }
     try {
@@ -30,9 +34,13 @@ export const TicketsCreatePage = () => {
       setDescription("");
       setCategory("help");
       setPriority("medium");
-      setMessage(t("tickets.created"));
+      const successMessage = t("tickets.created");
+      setMessage(successMessage);
+      showToast(successMessage, "success");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("tickets.createFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("tickets.createFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 
@@ -96,4 +104,3 @@ export const TicketsCreatePage = () => {
     </div>
   );
 };
-

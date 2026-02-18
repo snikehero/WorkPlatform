@@ -4,12 +4,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast";
 import { useAuthStore } from "@/stores/auth-store";
 import { useI18n } from "@/i18n/i18n";
 
 export const AccountPage = () => {
   const authState = useAuthStore.getState();
   const { locale, setLocale, t } = useI18n();
+  const { showToast } = useToast();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [language, setLanguage] = useState<"en" | "es">(authState.preferredLanguage);
@@ -22,9 +24,13 @@ export const AccountPage = () => {
       await useAuthStore.changePassword(currentPassword.trim(), newPassword.trim());
       setCurrentPassword("");
       setNewPassword("");
-      setMessage(t("account.passwordSaved"));
+      const successMessage = t("account.passwordSaved");
+      setMessage(successMessage);
+      showToast(successMessage, "success");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("account.passwordFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("account.passwordFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 
@@ -33,9 +39,13 @@ export const AccountPage = () => {
     try {
       await useAuthStore.updateLanguage(language);
       setLocale(language);
-      setMessage(t("account.languageSaved"));
+      const successMessage = t("account.languageSaved");
+      setMessage(successMessage);
+      showToast(successMessage, "success");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("account.languageFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("account.languageFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 

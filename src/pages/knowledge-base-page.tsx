@@ -5,12 +5,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/toast";
 import { knowledgeStore } from "@/stores/knowledge-store";
 import type { KnowledgeArticle } from "@/types/knowledge-article";
 import { useI18n } from "@/i18n/i18n";
 
 export const KnowledgeBasePage = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [articles, setArticles] = useState<KnowledgeArticle[]>([]);
   const [search, setSearch] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -62,7 +64,9 @@ export const KnowledgeBasePage = () => {
     event.preventDefault();
     setMessage(null);
     if (!title.trim()) {
-      setMessage(t("knowledge.titleRequired"));
+      const errorMessage = t("knowledge.titleRequired");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
       return;
     }
 
@@ -74,24 +78,35 @@ export const KnowledgeBasePage = () => {
     try {
       if (activeId) {
         await knowledgeStore.update(activeId, payload);
-        setMessage(t("knowledge.updated"));
+        const successMessage = t("knowledge.updated");
+        setMessage(successMessage);
+        showToast(successMessage, "success");
       } else {
         await knowledgeStore.add(payload);
-        setMessage(t("knowledge.created"));
+        const successMessage = t("knowledge.created");
+        setMessage(successMessage);
+        showToast(successMessage, "success");
       }
       resetForm();
       await loadArticles();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("knowledge.saveFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("knowledge.saveFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 
   const handleDelete = async (articleId: string) => {
-    await knowledgeStore.remove(articleId);
-    if (activeId === articleId) {
-      resetForm();
+    try {
+      await knowledgeStore.remove(articleId);
+      showToast(t("common.saved"), "success");
+      if (activeId === articleId) {
+        resetForm();
+      }
+      await loadArticles();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : t("knowledge.saveFailed"), "error");
     }
-    await loadArticles();
   };
 
   return (

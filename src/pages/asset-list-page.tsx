@@ -4,8 +4,11 @@ import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTableShell } from "@/components/ui/data-table-shell";
 import { Input } from "@/components/ui/input";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Select } from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast";
 import { assetStore } from "@/stores/asset-store";
 import type { Asset } from "@/types/asset";
 import { useI18n } from "@/i18n/i18n";
@@ -51,8 +54,11 @@ const getCategoryBadgeClass = (category: string) => {
 
 export const AssetListPage = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -64,17 +70,31 @@ export const AssetListPage = () => {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const loadAssets = async () => {
-    const data = await assetStore.all();
-    setAssets(data);
+    setLoadError(null);
+    setIsLoading(true);
+    try {
+      const data = await assetStore.all();
+      setAssets(data);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : t("assets.empty"));
+      setAssets([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadAssets().catch(() => setAssets([]));
+    loadAssets();
   }, []);
 
   const handleDelete = async (assetId: string) => {
-    await assetStore.remove(assetId);
-    await loadAssets();
+    try {
+      await assetStore.remove(assetId);
+      showToast(t("common.saved"), "success");
+      await loadAssets();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : t("assets.empty"), "error");
+    }
   };
 
   const handleStartMaintenance = (item: Asset) => {
@@ -260,116 +280,115 @@ export const AssetListPage = () => {
               {t("common.clear")}
             </Button>
           </div>
-          {filteredAndSortedAssets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("assets.empty")}</p>
-          ) : (
-            <div className="overflow-x-auto rounded-md border border-border">
-              <table className="w-full min-w-[1200px] text-left text-sm">
-                <thead className="bg-muted/50 text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("assetTag")}>
-                        {t("assets.assetTag")} {renderSortIcon("assetTag")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("qrCode")}>
-                        {t("assets.qrCode")} {renderSortIcon("qrCode")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("location")}>
-                        {t("common.location")} {renderSortIcon("location")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("serialNumber")}>
-                        {t("assets.serialNumber")} {renderSortIcon("serialNumber")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("category")}>
-                        {t("common.category")} {renderSortIcon("category")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("manufacturer")}>
-                        {t("assets.manufacturer")} {renderSortIcon("manufacturer")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("model")}>
-                        {t("assets.model")} {renderSortIcon("model")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("supplier")}>
-                        {t("assets.supplier")} {renderSortIcon("supplier")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("status")}>
-                        {t("common.status")} {renderSortIcon("status")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("user")}>
-                        {t("assets.user")} {renderSortIcon("user")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">
-                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("condition")}>
-                        {t("assets.condition")} {renderSortIcon("condition")}
-                      </button>
-                    </th>
-                    <th className="px-3 py-2">{t("common.view")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAndSortedAssets.map((item) => (
-                    <tr key={item.id} className="border-t border-border align-top">
-                      <td className="px-3 py-2">{item.assetTag}</td>
-                      <td className="px-3 py-2">{item.qrCode || "-"}</td>
-                      <td className="px-3 py-2">{item.location || "-"}</td>
-                      <td className="px-3 py-2">{item.serialNumber || "-"}</td>
-                      <td className="px-3 py-2">
-                        {item.category ? (
-                          <Badge variant="neutral" className={getCategoryBadgeClass(item.category)}>
-                            {item.category}
-                          </Badge>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{item.manufacturer || "-"}</td>
-                      <td className="px-3 py-2">{item.model || "-"}</td>
-                      <td className="px-3 py-2">{item.supplier || "-"}</td>
-                      <td className="px-3 py-2">
-                        <Badge variant={item.status === "active" ? "success" : item.status === "maintenance" ? "warning" : "neutral"}>
-                          {t(`assets.status.${item.status}`)}
+          {isLoading ? <LoadingState /> : null}
+          {!isLoading && loadError ? <ErrorState label={loadError} onRetry={loadAssets} /> : null}
+          {!isLoading && !loadError && filteredAndSortedAssets.length === 0 ? <EmptyState label={t("assets.empty")} /> : null}
+          {!isLoading && !loadError && filteredAndSortedAssets.length > 0 ? (
+            <DataTableShell minWidthClass="min-w-[1200px]">
+              <thead className="text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("assetTag")}>
+                      {t("assets.assetTag")} {renderSortIcon("assetTag")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("qrCode")}>
+                      {t("assets.qrCode")} {renderSortIcon("qrCode")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("location")}>
+                      {t("common.location")} {renderSortIcon("location")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("serialNumber")}>
+                      {t("assets.serialNumber")} {renderSortIcon("serialNumber")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("category")}>
+                      {t("common.category")} {renderSortIcon("category")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("manufacturer")}>
+                      {t("assets.manufacturer")} {renderSortIcon("manufacturer")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("model")}>
+                      {t("assets.model")} {renderSortIcon("model")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("supplier")}>
+                      {t("assets.supplier")} {renderSortIcon("supplier")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("status")}>
+                      {t("common.status")} {renderSortIcon("status")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("user")}>
+                      {t("assets.user")} {renderSortIcon("user")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("condition")}>
+                      {t("assets.condition")} {renderSortIcon("condition")}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">{t("common.view")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAndSortedAssets.map((item) => (
+                  <tr key={item.id} className="border-t border-border align-top">
+                    <td className="px-3 py-2">{item.assetTag}</td>
+                    <td className="px-3 py-2">{item.qrCode || "-"}</td>
+                    <td className="px-3 py-2">{item.location || "-"}</td>
+                    <td className="px-3 py-2">{item.serialNumber || "-"}</td>
+                    <td className="px-3 py-2">
+                      {item.category ? (
+                        <Badge variant="neutral" className={getCategoryBadgeClass(item.category)}>
+                          {item.category}
                         </Badge>
-                      </td>
-                      <td className="px-3 py-2">{item.user || t("assets.unassigned")}</td>
-                      <td className="px-3 py-2">{item.condition || "-"}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          <Button variant="default" size="sm" onClick={() => handleStartMaintenance(item)}>
-                            {t("assets.startMaintenance")}
-                          </Button>
-                          <Button variant="secondary" size="sm" onClick={() => navigate(`/assets/register/${item.id}`)}>
-                            {t("assets.edit")}
-                          </Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)}>
-                            {t("common.delete")}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td className="px-3 py-2">{item.manufacturer || "-"}</td>
+                    <td className="px-3 py-2">{item.model || "-"}</td>
+                    <td className="px-3 py-2">{item.supplier || "-"}</td>
+                    <td className="px-3 py-2">
+                      <Badge variant={item.status === "active" ? "success" : item.status === "maintenance" ? "warning" : "neutral"}>
+                        {t(`assets.status.${item.status}`)}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2">{item.user || t("assets.unassigned")}</td>
+                    <td className="px-3 py-2">{item.condition || "-"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-2">
+                        <Button variant="default" size="sm" onClick={() => handleStartMaintenance(item)}>
+                          {t("assets.startMaintenance")}
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={() => navigate(`/assets/register/${item.id}`)}>
+                          {t("assets.edit")}
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)}>
+                          {t("common.delete")}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </DataTableShell>
+          ) : null}
         </CardContent>
       </Card>
     </div>

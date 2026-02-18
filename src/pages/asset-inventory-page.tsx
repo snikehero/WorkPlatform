@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/toast";
 import { assetStore } from "@/stores/asset-store";
 import { peopleStore } from "@/stores/people-store";
 import type { Asset, AssetStatus } from "@/types/asset";
@@ -109,6 +110,7 @@ const EMPTY_DRAFT: AssetDraft = {
 
 export const AssetInventoryPage = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { assetId } = useParams<{ assetId: string }>();
   const isEditMode = Boolean(assetId);
@@ -220,7 +222,9 @@ export const AssetInventoryPage = () => {
     event.preventDefault();
     setMessage(null);
     if (!draft.assetTag.trim()) {
-      setMessage(t("assets.requiredFields"));
+      const errorMessage = t("assets.requiredFields");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
       return;
     }
 
@@ -229,10 +233,14 @@ export const AssetInventoryPage = () => {
     try {
       if (isEditMode && assetId) {
         await assetStore.update(assetId, payload);
-        setMessage(t("assets.updated"));
+        const successMessage = t("assets.updated");
+        setMessage(successMessage);
+        showToast(successMessage, "success");
       } else {
         await assetStore.add(payload);
-        setMessage(t("assets.created"));
+        const successMessage = t("assets.created");
+        setMessage(successMessage);
+        showToast(successMessage, "success");
       }
       if (isEditMode) {
         navigate("/assets/list");
@@ -241,7 +249,9 @@ export const AssetInventoryPage = () => {
       }
       await loadAssets();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("assets.saveFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("assets.saveFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 
@@ -457,7 +467,16 @@ export const AssetInventoryPage = () => {
                   <Button type="button" variant="secondary" onClick={openQrInNewTab}>
                     {t("assets.generateQr")}
                   </Button>
-                  <Button type="button" onClick={() => downloadQr().catch(() => setMessage(t("assets.qrDownloadFailed")))}>
+                  <Button
+                    type="button"
+                    onClick={() =>
+                      downloadQr().catch(() => {
+                        const errorMessage = t("assets.qrDownloadFailed");
+                        setMessage(errorMessage);
+                        showToast(errorMessage, "error");
+                      })
+                    }
+                  >
                     {t("assets.downloadQr")}
                   </Button>
                 </div>

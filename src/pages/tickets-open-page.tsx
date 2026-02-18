@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import { useToast } from "@/components/ui/toast";
 import { ticketStore } from "@/stores/ticket-store";
 import { useAuthStore } from "@/stores/auth-store";
 import type { Ticket } from "@/types/ticket";
@@ -10,18 +12,29 @@ import { useI18n } from "@/i18n/i18n";
 export const TicketsOpenPage = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const currentUserEmail = useAuthStore.getState().userEmail;
   const currentUserRole = useAuthStore.getState().role;
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadTickets = async () => {
-    const data = await ticketStore.openUnassigned();
-    setTickets(data);
+    setLoadError(null);
+    setIsLoading(true);
+    try {
+      const data = await ticketStore.openUnassigned();
+      setTickets(data);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : t("tickets.openEmpty"));
+      setTickets([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadTickets().catch(() => setTickets([]));
+    loadTickets();
   }, []);
 
   const assignToMe = async (ticketId: string) => {
@@ -32,13 +45,14 @@ export const TicketsOpenPage = () => {
         users.find((user) => user.email.trim().toLowerCase() === normalizedCurrentEmail) ??
         (currentUserRole === "developer" && users.length === 1 ? users[0] : undefined);
       if (!mine) {
-        setMessage(t("tickets.assignSelfFailed"));
+        showToast(t("tickets.assignSelfFailed"), "error");
         return;
       }
       await ticketStore.assign(ticketId, mine.id);
+      showToast(t("tickets.assigned"), "success");
       await loadTickets();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("tickets.assignSelfFailed"));
+      showToast(error instanceof Error ? error.message : t("tickets.assignSelfFailed"), "error");
     }
   };
 
@@ -55,9 +69,10 @@ export const TicketsOpenPage = () => {
           <CardDescription>{t("tickets.openSubtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {tickets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("tickets.openEmpty")}</p>
-          ) : (
+          {isLoading ? <LoadingState /> : null}
+          {!isLoading && loadError ? <ErrorState label={loadError} onRetry={loadTickets} /> : null}
+          {!isLoading && !loadError && tickets.length === 0 ? <EmptyState label={t("tickets.openEmpty")} /> : null}
+          {!isLoading && !loadError && tickets.length > 0 ? (
             <ul className="space-y-3">
               {tickets.map((ticket) => (
                 <li key={ticket.id} className="rounded-md border border-border bg-card p-3">
@@ -78,8 +93,7 @@ export const TicketsOpenPage = () => {
                 </li>
               ))}
             </ul>
-          )}
-          {message ? <p className="mt-3 text-sm text-muted-foreground">{message}</p> : null}
+          ) : null}
         </CardContent>
       </Card>
     </div>

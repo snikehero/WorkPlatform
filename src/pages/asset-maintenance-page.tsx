@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { MaintenanceForm } from "@/components/maintenance/maintenance-form";
 import { MaintenanceList } from "@/components/maintenance/maintenance-list";
+import { useToast } from "@/components/ui/toast";
 import { exportMaintenanceRecordToExcel } from "@/lib/maintenance-excel";
 import { maintenanceStore } from "@/stores/maintenance-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -28,6 +29,7 @@ type MaintenancePrefillState = {
 
 export const AssetMaintenancePage = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const location = useLocation();
   const navigationState = (location.state as MaintenancePrefillState | null) ?? null;
   const prefill = navigationState?.prefill ?? null;
@@ -68,13 +70,23 @@ export const AssetMaintenancePage = () => {
     responsibleName: string;
     checks: MaintenanceCheck[];
   }) => {
-    await maintenanceStore.add({ ...input, responsibleName });
-    await loadRecords();
+    try {
+      await maintenanceStore.add({ ...input, responsibleName });
+      showToast(t("maintenance.recordSaved"), "success");
+      await loadRecords();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : t("maintenance.recordSaveFailed"), "error");
+    }
   };
 
   const handleDeleteRecord = async (recordId: string) => {
-    await maintenanceStore.remove(recordId);
-    await loadRecords();
+    try {
+      await maintenanceStore.remove(recordId);
+      showToast(t("maintenance.recordDeleted"), "success");
+      await loadRecords();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : t("maintenance.recordDeleteFailed"), "error");
+    }
   };
 
   const handleTemplateUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -83,22 +95,30 @@ export const AssetMaintenancePage = () => {
 
     setTemplateFile(file);
     setTemplateName(file.name);
-    setExportMessage(`${t("maintenance.templateLoaded")}: ${file.name}`);
+    const infoMessage = `${t("maintenance.templateLoaded")}: ${file.name}`;
+    setExportMessage(infoMessage);
+    showToast(infoMessage, "info");
     event.target.value = "";
   };
 
   const handleExportRecord = async (record: MaintenanceRecord) => {
     if (!templateFile) {
-      setExportMessage(t("maintenance.uploadTemplateFirst"));
+      const errorMessage = t("maintenance.uploadTemplateFirst");
+      setExportMessage(errorMessage);
+      showToast(errorMessage, "error");
       return;
     }
 
     try {
       await exportMaintenanceRecordToExcel(record, templateFile);
-      setExportMessage(t("maintenance.exported", { id: record.qr || record.serialNumber }));
+      const successMessage = t("maintenance.exported", { id: record.qr || record.serialNumber });
+      setExportMessage(successMessage);
+      showToast(successMessage, "success");
     } catch (error) {
       const message = error instanceof Error ? error.message : t("maintenance.unexpectedExportError");
-      setExportMessage(`${t("maintenance.exportFailed")}: ${message}`);
+      const errorMessage = `${t("maintenance.exportFailed")}: ${message}`;
+      setExportMessage(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 
@@ -185,4 +205,3 @@ export const AssetMaintenancePage = () => {
     </div>
   );
 };
-

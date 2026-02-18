@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/i18n/i18n";
 import { ticketStore } from "@/stores/ticket-store";
 import type { Ticket, TicketAssignee, TicketEvidence, TicketEvent, TicketStatus } from "@/types/ticket";
@@ -26,6 +27,7 @@ const createEvidenceItem = (): TicketEvidence => ({
 
 export const TicketSolutionPage = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { ticketId = "" } = useParams();
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -53,9 +55,11 @@ export const TicketSolutionPage = () => {
     if (!ticketId) return;
     loadTicket().catch((error) => {
       setTicket(null);
-      setMessage(error instanceof Error ? error.message : t("tickets.detailLoadFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("tickets.detailLoadFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     });
-  }, [ticketId, t]);
+  }, [showToast, ticketId, t]);
 
   const nonEmptyEvidenceCount = useMemo(
     () => evidence.filter((item) => Boolean(item.text.trim()) || Boolean(item.imageData)).length,
@@ -89,11 +93,15 @@ export const TicketSolutionPage = () => {
   const handleStatusUpdate = async (status: TicketStatus) => {
     if (!ticket) return;
     if (status === "resolved" && !resolution.trim()) {
-      setMessage(t("tickets.resolveNeedsResolution"));
+      const errorMessage = t("tickets.resolveNeedsResolution");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
       return;
     }
     if (status === "resolved" && nonEmptyEvidenceCount === 0) {
-      setMessage(t("tickets.resolveNeedsEvidence"));
+      const errorMessage = t("tickets.resolveNeedsEvidence");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
       return;
     }
 
@@ -105,9 +113,13 @@ export const TicketSolutionPage = () => {
       setEvidence(updated.evidence ?? []);
       const eventItems = await ticketStore.events(ticket.id);
       setEvents(eventItems);
-      setMessage(t("tickets.detailSaved"));
+      const successMessage = t("tickets.detailSaved");
+      setMessage(successMessage);
+      showToast(successMessage, "success");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("tickets.createFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("tickets.createFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     } finally {
       setIsSaving(false);
     }
@@ -122,9 +134,13 @@ export const TicketSolutionPage = () => {
       setTicket(updated);
       const eventItems = await ticketStore.events(ticket.id);
       setEvents(eventItems);
-      setMessage(t("tickets.detailSaved"));
+      const successMessage = t("tickets.detailSaved");
+      setMessage(successMessage);
+      showToast(successMessage, "success");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("tickets.createFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("tickets.createFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     } finally {
       setIsSaving(false);
     }

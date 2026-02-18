@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import { useToast } from "@/components/ui/toast";
 import { Select } from "@/components/ui/select";
 import { ticketStore } from "@/stores/ticket-store";
 import type { Ticket } from "@/types/ticket";
@@ -11,21 +13,32 @@ import { useAuthStore } from "@/stores/auth-store";
 
 export const TicketsMyPage = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const role = useAuthStore.getState().role;
   const isTeamUser = role === "admin" || role === "developer";
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [developerFilter, setDeveloperFilter] = useState<"assigned" | "closed">("assigned");
   const [userFilter, setUserFilter] = useState<"active" | "closed">("active");
-  const [message, setMessage] = useState<string | null>(null);
 
   const loadTickets = async () => {
-    const data = isTeamUser ? await ticketStore.assignedMine() : await ticketStore.mine();
-    setTickets(data);
+    setLoadError(null);
+    setIsLoading(true);
+    try {
+      const data = isTeamUser ? await ticketStore.assignedMine() : await ticketStore.mine();
+      setTickets(data);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : t("tickets.myEmpty"));
+      setTickets([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadTickets().catch(() => setTickets([]));
+    loadTickets();
   }, [isTeamUser]);
 
   const filteredTickets = useMemo(() => {
@@ -45,13 +58,12 @@ export const TicketsMyPage = () => {
   const handleDeleteMine = async (ticketId: string) => {
     const shouldDelete = window.confirm(t("tickets.deleteConfirm"));
     if (!shouldDelete) return;
-    setMessage(null);
     try {
       await ticketStore.deleteMine(ticketId);
       await loadTickets();
-      setMessage(t("tickets.deleted"));
+      showToast(t("tickets.deleted"), "success");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("tickets.deleteFailed"));
+      showToast(error instanceof Error ? error.message : t("tickets.deleteFailed"), "error");
     }
   };
 
@@ -83,9 +95,10 @@ export const TicketsMyPage = () => {
               </Select>
             </div>
           )}
-          {visibleTickets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("tickets.myEmpty")}</p>
-          ) : (
+          {isLoading ? <LoadingState /> : null}
+          {!isLoading && loadError ? <ErrorState label={loadError} onRetry={loadTickets} /> : null}
+          {!isLoading && !loadError && visibleTickets.length === 0 ? <EmptyState label={t("tickets.myEmpty")} /> : null}
+          {!isLoading && !loadError && visibleTickets.length > 0 ? (
             <ul className="space-y-2">
               {visibleTickets.map((ticket) => (
                 <li key={ticket.id} className="rounded-md border border-border bg-card p-3">
@@ -128,8 +141,7 @@ export const TicketsMyPage = () => {
                 </li>
               ))}
             </ul>
-          )}
-          {message ? <p className="mt-3 text-sm text-muted-foreground">{message}</p> : null}
+          ) : null}
         </CardContent>
       </Card>
     </div>

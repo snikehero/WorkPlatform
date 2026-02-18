@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/i18n/i18n";
 import { peopleStore } from "@/stores/people-store";
 import type { ManagedPerson } from "@/types/person";
@@ -51,6 +52,7 @@ const EMPTY_DRAFT: PersonDraft = {
 
 export const UserManagementPage = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [people, setPeople] = useState<ManagedPerson[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -102,7 +104,9 @@ export const UserManagementPage = () => {
     event.preventDefault();
     setMessage(null);
     if (!draft.name.trim()) {
-      setMessage(t("people.requiredName"));
+      const errorMessage = t("people.requiredName");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
       return;
     }
     const payload = {
@@ -118,15 +122,21 @@ export const UserManagementPage = () => {
     try {
       if (activeId) {
         await peopleStore.update(activeId, payload);
-        setMessage(t("people.updated"));
+        const successMessage = t("people.updated");
+        setMessage(successMessage);
+        showToast(successMessage, "success");
       } else {
         await peopleStore.add(payload);
-        setMessage(t("people.created"));
+        const successMessage = t("people.created");
+        setMessage(successMessage);
+        showToast(successMessage, "success");
       }
       await loadPeople();
       resetForm();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("people.saveFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("people.saveFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 

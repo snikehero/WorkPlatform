@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/i18n/i18n";
 import { adminStore } from "@/stores/admin-store";
 import type { AppUser } from "@/types/user";
@@ -16,6 +17,7 @@ type UserDraft = {
 
 export const AdminUsersPage = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [drafts, setDrafts] = useState<Record<string, UserDraft>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -51,17 +53,23 @@ export const AdminUsersPage = () => {
     setMessage(null);
     try {
       await adminStore.updateUser(userId, draft.email.trim(), draft.role);
-      setMessage(t("admin.updated"));
+      const successMessage = t("admin.updated");
+      setMessage(successMessage);
+      showToast(successMessage, "success");
       await loadUsers();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("admin.updateFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("admin.updateFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 
   const handleResetPassword = async (userId: string) => {
     const draft = drafts[userId];
     if (!draft?.resetPassword.trim()) {
-      setMessage(t("admin.resetEnterPassword"));
+      const errorMessage = t("admin.resetEnterPassword");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
       return;
     }
     setMessage(null);
@@ -74,9 +82,13 @@ export const AdminUsersPage = () => {
           resetPassword: "",
         },
       }));
-      setMessage(t("admin.resetDone"));
+      const successMessage = t("admin.resetDone");
+      setMessage(successMessage);
+      showToast(successMessage, "success");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("admin.resetFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("admin.resetFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 
@@ -84,10 +96,14 @@ export const AdminUsersPage = () => {
     setMessage(null);
     try {
       await adminStore.deleteUser(userId);
-      setMessage(t("admin.deleted"));
+      const successMessage = t("admin.deleted");
+      setMessage(successMessage);
+      showToast(successMessage, "success");
       await loadUsers();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("admin.deleteFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("admin.deleteFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 

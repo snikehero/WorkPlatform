@@ -104,7 +104,12 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
               <CheckSquare className="size-5 text-sky-500" />
               {isSidebarOpen ? t("app.name") : null}
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => setIsSidebarOpen((open) => !open)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+              onClick={() => setIsSidebarOpen((open) => !open)}
+            >
               <Menu className="size-4" />
             </Button>
           </div>
@@ -404,7 +409,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                   <User className="mr-1 size-4" />
                   {t("nav.account")}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={toggleTheme}>
+                <Button variant="ghost" size="sm" aria-label="Toggle theme" onClick={toggleTheme}>
                   {resolvedTheme === "dark" ? (
                     <Sun className="mr-1 size-4" />
                   ) : (

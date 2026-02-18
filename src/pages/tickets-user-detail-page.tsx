@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/i18n/i18n";
 import { ticketStore } from "@/stores/ticket-store";
 import type { Ticket, TicketEvent } from "@/types/ticket";
@@ -15,6 +16,7 @@ const getStatusVariant = (status: Ticket["status"]) => {
 
 export const TicketsUserDetailPage = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { ticketId = "" } = useParams();
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -32,9 +34,11 @@ export const TicketsUserDetailPage = () => {
       .catch((error) => {
         setTicket(null);
         setEvents([]);
-        setMessage(error instanceof Error ? error.message : t("tickets.detailLoadFailed"));
+        const errorMessage = error instanceof Error ? error.message : t("tickets.detailLoadFailed");
+        setMessage(errorMessage);
+        showToast(errorMessage, "error");
       });
-  }, [ticketId, t]);
+  }, [showToast, ticketId, t]);
 
   if (!ticket) {
     return (
@@ -58,9 +62,12 @@ export const TicketsUserDetailPage = () => {
     setMessage(null);
     try {
       await ticketStore.deleteMine(ticket.id);
+      showToast(t("tickets.deleted"), "success");
       navigate("/tickets/my");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : t("tickets.deleteFailed"));
+      const errorMessage = error instanceof Error ? error.message : t("tickets.deleteFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
     } finally {
       setIsDeleting(false);
     }
