@@ -324,6 +324,16 @@ class AssetOut(BaseModel):
     updatedAt: str
 
 
+class AssetEventOut(BaseModel):
+    id: str
+    assetId: str
+    actorId: str | None
+    actorEmail: str | None
+    eventType: str
+    payload: dict[str, object]
+    createdAt: str
+
+
 class ChangePasswordIn(BaseModel):
     currentPassword: str
     newPassword: str = Field(min_length=6, max_length=128)

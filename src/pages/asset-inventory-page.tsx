@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { assetStore } from "@/stores/asset-store";
 import { peopleStore } from "@/stores/people-store";
-import type { Asset, AssetStatus } from "@/types/asset";
+import type { Asset, AssetHistoryEvent, AssetStatus } from "@/types/asset";
 import type { ManagedPerson } from "@/types/person";
 import { useI18n } from "@/i18n/i18n";
 
@@ -115,6 +115,7 @@ export const AssetInventoryPage = () => {
   const { assetId } = useParams<{ assetId: string }>();
   const isEditMode = Boolean(assetId);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [history, setHistory] = useState<AssetHistoryEvent[]>([]);
   const [people, setPeople] = useState<ManagedPerson[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [draft, setDraft] = useState<AssetDraft>(EMPTY_DRAFT);
@@ -158,12 +159,29 @@ export const AssetInventoryPage = () => {
     setPeople(data);
   };
 
+  const loadHistory = async () => {
+    if (!assetId) {
+      setHistory([]);
+      return;
+    }
+    const events = await assetStore.history(assetId);
+    setHistory(events);
+  };
+
   useEffect(() => {
     Promise.all([loadAssets(), loadPeople()]).catch(() => {
       setAssets([]);
       setPeople([]);
     });
   }, []);
+
+  useEffect(() => {
+    if (!isEditMode) {
+      setHistory([]);
+      return;
+    }
+    loadHistory().catch(() => setHistory([]));
+  }, [assetId, isEditMode]);
 
   useEffect(() => {
     if (isEditMode) return;
@@ -236,6 +254,7 @@ export const AssetInventoryPage = () => {
         const successMessage = t("assets.updated");
         setMessage(successMessage);
         showToast(successMessage, "success");
+        await loadHistory();
       } else {
         await assetStore.add(payload);
         const successMessage = t("assets.created");
@@ -486,6 +505,35 @@ export const AssetInventoryPage = () => {
           {message ? <p className="mt-3 text-sm text-muted-foreground">{message}</p> : null}
         </CardContent>
       </Card>
+      {isEditMode ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Asset Lifecycle</CardTitle>
+            <CardDescription>Change history and maintenance activity for this asset.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {history.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No lifecycle events yet.</p>
+            ) : (
+              <ul className="space-y-3">
+                {history.map((event) => (
+                  <li key={event.id} className="rounded-md border border-border p-3">
+                    <p className="text-sm font-medium text-foreground">
+                      {event.eventType}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(event.createdAt).toLocaleString()} | {event.actorEmail ?? "system"}
+                    </p>
+                    <pre className="mt-2 overflow-auto rounded bg-muted/40 p-2 text-xs text-muted-foreground">
+                      {JSON.stringify(event.payload, null, 2)}
+                    </pre>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 };

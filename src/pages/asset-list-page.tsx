@@ -99,7 +99,7 @@ export const AssetListPage = () => {
 
   const handleStartMaintenance = (item: Asset) => {
     const consecutive = item.assetTag.replace(/^TDC-/i, "").replace(/\D/g, "").padStart(4, "0").slice(-4);
-    navigate("/asset-maintenance", {
+    navigate("/maintenance/create", {
       state: {
         prefill: {
           qr: item.qrCode,

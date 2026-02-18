@@ -6,7 +6,9 @@ import { ProjectsPage } from "@/pages/projects-page";
 import { DailyTasksPage } from "@/pages/daily-tasks-page";
 import { WeeklyReviewPage } from "@/pages/weekly-review-page";
 import { TeamCalendarPage } from "@/pages/team-calendar-page";
-import { AssetMaintenancePage } from "@/pages/asset-maintenance-page";
+import { MaintenanceCreatePage } from "@/pages/maintenance-create-page";
+import { MaintenanceDashboardPage } from "@/pages/maintenance-dashboard-page";
+import { MaintenanceRegistryPage } from "@/pages/maintenance-registry-page";
 import { AdminDashboardPage } from "@/pages/admin-dashboard-page";
 import { AdminUsersPage } from "@/pages/admin-users-page";
 import { TicketsCreatePage } from "@/pages/tickets-create-page";
@@ -137,7 +139,7 @@ export const router = createBrowserRouter([
     path: "/pc-maintenance",
     element: (
       <TeamRoute>
-        <Navigate to="/asset-maintenance" replace />
+        <Navigate to="/maintenance/create" replace />
       </TeamRoute>
     ),
   },
@@ -145,8 +147,44 @@ export const router = createBrowserRouter([
     path: "/asset-maintenance",
     element: (
       <TeamRoute>
+        <Navigate to="/maintenance/create" replace />
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/maintenance/dashboard",
+    element: (
+      <TeamRoute>
         <AppLayout>
-          <AssetMaintenancePage />
+          <MaintenanceDashboardPage />
+        </AppLayout>
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/maintenance",
+    element: (
+      <TeamRoute>
+        <Navigate to="/maintenance/dashboard" replace />
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/maintenance/registry",
+    element: (
+      <TeamRoute>
+        <AppLayout>
+          <MaintenanceRegistryPage />
+        </AppLayout>
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/maintenance/create",
+    element: (
+      <TeamRoute>
+        <AppLayout>
+          <MaintenanceCreatePage />
         </AppLayout>
       </TeamRoute>
     ),

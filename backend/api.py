@@ -483,6 +483,18 @@ def list_assets(current_user: User = Depends(get_current_user), db: Session = De
     return [asset_to_out(item) for item in items]
 
 
+@router.get("/api/assets/{asset_id}/history", response_model=list[AssetEventOut])
+def list_asset_history(asset_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role in (UserRole.admin.value, UserRole.developer.value):
+        item = db.scalar(select(Asset).where(Asset.id == asset_id))
+    else:
+        item = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.owner_id == current_user.id))
+    if not item:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    events = db.scalars(select(AssetEvent).where(AssetEvent.asset_id == asset_id).order_by(AssetEvent.created_at.desc())).all()
+    return [asset_event_to_out(event, db) for event in events]
+
+
 @router.post("/api/assets", response_model=AssetOut)
 def create_asset(payload: AssetIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     status_value = payload.status.strip().lower()
@@ -513,6 +525,19 @@ def create_asset(payload: AssetIn, current_user: User = Depends(get_current_user
         condition=payload.condition.strip(),
     )
     db.add(item)
+    db.flush()
+    log_asset_event(
+        db,
+        item.id,
+        current_user.id,
+        "created",
+        {
+            "assetTag": item.asset_tag,
+            "status": item.status,
+            "location": item.location,
+            "user": item.user_name,
+        },
+    )
     db.commit()
     db.refresh(item)
     return asset_to_out(item)
@@ -534,6 +559,19 @@ def update_asset(asset_id: str, payload: AssetIn, current_user: User = Depends(g
     assigned_user = normalize_assigned_user(payload.user)
     qr_class = normalize_qr_class(payload.qrClass)
     qr_code_value = build_qr_code_from_asset_tag(item.asset_tag, qr_class)
+    previous = {
+        "qrCode": item.qr_code,
+        "location": item.location,
+        "serialNumber": item.serial_number,
+        "category": item.category,
+        "manufacturer": item.manufacturer,
+        "model": item.model,
+        "supplier": item.supplier,
+        "status": item.status,
+        "user": item.user_name,
+        "condition": item.condition,
+        "notes": item.notes,
+    }
 
     item.name = payload.model.strip() or payload.serialNumber.strip().upper() or item.asset_tag
     item.qr_code = qr_code_value
@@ -551,6 +589,32 @@ def update_asset(asset_id: str, payload: AssetIn, current_user: User = Depends(g
     item.user_name = assigned_user
     item.condition = payload.condition.strip()
     item.updated_at = datetime.now(timezone.utc)
+    current = {
+        "qrCode": item.qr_code,
+        "location": item.location,
+        "serialNumber": item.serial_number,
+        "category": item.category,
+        "manufacturer": item.manufacturer,
+        "model": item.model,
+        "supplier": item.supplier,
+        "status": item.status,
+        "user": item.user_name,
+        "condition": item.condition,
+        "notes": item.notes,
+    }
+    changes = {
+        key: {"before": previous[key], "after": current[key]}
+        for key in current
+        if previous[key] != current[key]
+    }
+    if changes:
+        log_asset_event(
+            db,
+            item.id,
+            current_user.id,
+            "updated",
+            {"changes": changes},
+        )
     db.commit()
     db.refresh(item)
     return asset_to_out(item)
@@ -564,6 +628,13 @@ def delete_asset(asset_id: str, current_user: User = Depends(get_current_user), 
         item = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.owner_id == current_user.id))
     if not item:
         raise HTTPException(status_code=404, detail="Asset not found")
+    log_asset_event(
+        db,
+        item.id,
+        current_user.id,
+        "deleted",
+        {"assetTag": item.asset_tag, "status": item.status, "location": item.location, "user": item.user_name},
+    )
     db.delete(item)
     db.commit()
     return {"ok": True}
@@ -842,9 +913,12 @@ def list_ticket_events(ticket_id: str, _: User = Depends(require_developer_or_ad
 
 @router.get("/api/maintenance-records", response_model=list[MaintenanceRecordOut])
 def list_maintenance_records(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
-    records = db.scalars(
-        select(MaintenanceRecord).where(MaintenanceRecord.owner_id == current_user.id).order_by(MaintenanceRecord.created_at.desc())
-    ).all()
+    if current_user.role in (UserRole.admin.value, UserRole.developer.value):
+        records = db.scalars(select(MaintenanceRecord).order_by(MaintenanceRecord.created_at.desc())).all()
+    else:
+        records = db.scalars(
+            select(MaintenanceRecord).where(MaintenanceRecord.owner_id == current_user.id).order_by(MaintenanceRecord.created_at.desc())
+        ).all()
     return [maintenance_to_out(item) for item in records]
 
 
@@ -879,6 +953,23 @@ def create_maintenance_record(payload: MaintenanceRecordIn, current_user: User =
         )
 
     db.add(record)
+    db.flush()
+    matched_asset = db.scalar(select(Asset).where(Asset.qr_code == record.qr))
+    if not matched_asset:
+        matched_asset = db.scalar(select(Asset).where(Asset.serial_number == record.serial_number))
+    if matched_asset:
+        log_asset_event(
+            db,
+            matched_asset.id,
+            current_user.id,
+            "maintenance_recorded",
+            {
+                "maintenanceRecordId": record.id,
+                "maintenanceType": record.maintenance_type,
+                "maintenanceDate": record.maintenance_date.isoformat(),
+                "responsibleName": record.responsible_name,
+            },
+        )
     db.commit()
     db.refresh(record)
     return maintenance_to_out(record)
@@ -886,7 +977,10 @@ def create_maintenance_record(payload: MaintenanceRecordIn, current_user: User =
 
 @router.delete("/api/maintenance-records/{record_id}")
 def delete_maintenance_record(record_id: str, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
-    record = db.scalar(select(MaintenanceRecord).where(MaintenanceRecord.id == record_id, MaintenanceRecord.owner_id == current_user.id))
+    if current_user.role in (UserRole.admin.value, UserRole.developer.value):
+        record = db.scalar(select(MaintenanceRecord).where(MaintenanceRecord.id == record_id))
+    else:
+        record = db.scalar(select(MaintenanceRecord).where(MaintenanceRecord.id == record_id, MaintenanceRecord.owner_id == current_user.id))
     if not record:
         raise HTTPException(status_code=404, detail="Maintenance record not found")
     db.delete(record)

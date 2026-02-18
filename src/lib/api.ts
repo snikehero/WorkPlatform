@@ -1,4 +1,7 @@
-const DEFAULT_API_BASE = "http://localhost:8000";
+const DEFAULT_API_BASE =
+  typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : "http://localhost:8000";
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? DEFAULT_API_BASE;
 
 const AUTH_STORAGE_KEY = "workplatform-auth";

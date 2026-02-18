@@ -1,5 +1,5 @@
 import { apiRequest } from "@/lib/api";
-import type { Asset, AssetStatus } from "@/types/asset";
+import type { Asset, AssetHistoryEvent, AssetStatus } from "@/types/asset";
 
 type AssetPayload = {
   assetTag: string;
@@ -19,6 +19,7 @@ type AssetPayload = {
 
 export const assetStore = {
   all: () => apiRequest<Asset[]>("/api/assets"),
+  history: (assetId: string) => apiRequest<AssetHistoryEvent[]>(`/api/assets/${assetId}/history`),
   add: (payload: AssetPayload) =>
     apiRequest<Asset>("/api/assets", {
       method: "POST",

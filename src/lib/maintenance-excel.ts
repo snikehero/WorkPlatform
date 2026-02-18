@@ -1,6 +1,9 @@
 import type { MaintenanceRecord } from "@/types/maintenance-record";
 
-const DEFAULT_EXPORT_API = "http://localhost:8000/api/maintenance/export";
+const DEFAULT_EXPORT_API =
+  typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.hostname}:8000/api/maintenance/export`
+    : "http://localhost:8000/api/maintenance/export";
 const EXPORT_API_URL =
   (import.meta.env.VITE_MAINTENANCE_EXPORT_API as string | undefined) ?? DEFAULT_EXPORT_API;
 const AUTH_STORAGE_KEY = "workplatform-auth";

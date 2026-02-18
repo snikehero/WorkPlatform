@@ -204,7 +204,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                   {(userRole === "admin" || userRole === "developer") ? (
                     <>
                       <NavLink
-                        to="/asset-maintenance"
+                        to="/maintenance/dashboard"
                         className={({ isActive }) =>
                           `block rounded-md px-2 py-2 text-sm ${
                             isActive
@@ -213,7 +213,31 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                           }`
                         }
                       >
-                        {t("nav.assetMaintenance")}
+                        {t("nav.maintenanceDashboard")}
+                      </NavLink>
+                      <NavLink
+                        to="/maintenance/registry"
+                        className={({ isActive }) =>
+                          `block rounded-md px-2 py-2 text-sm ${
+                            isActive
+                              ? "bg-muted text-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`
+                        }
+                      >
+                        {t("nav.maintenanceRegistry")}
+                      </NavLink>
+                      <NavLink
+                        to="/maintenance/create"
+                        className={({ isActive }) =>
+                          `block rounded-md px-2 py-2 text-sm ${
+                            isActive
+                              ? "bg-muted text-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`
+                        }
+                      >
+                        {t("nav.maintenanceCreate")}
                       </NavLink>
                     </>
                   ) : null}

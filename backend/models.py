@@ -199,6 +199,17 @@ class Asset(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
+class AssetEvent(Base):
+    __tablename__ = "asset_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    asset_id: Mapped[str] = mapped_column(String(36), index=True)
+    actor_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(50))
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+
 class Person(Base):
     __tablename__ = "people"
 

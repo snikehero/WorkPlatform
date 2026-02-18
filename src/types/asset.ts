@@ -17,3 +17,13 @@ export type Asset = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type AssetHistoryEvent = {
+  id: string;
+  assetId: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  eventType: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};

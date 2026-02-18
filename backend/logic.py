@@ -11,6 +11,7 @@ try:
     from .auth import get_current_user
     from .models import (
         Asset,
+        AssetEvent,
         KnowledgeArticle,
         MaintenanceRecord,
         Note,
@@ -26,6 +27,7 @@ try:
         UserRole,
     )
     from .schemas import (
+        AssetEventOut,
         AssetOut,
         KnowledgeArticleOut,
         MaintenanceCheckPayload,
@@ -44,6 +46,7 @@ except ImportError:
     from auth import get_current_user
     from models import (
         Asset,
+        AssetEvent,
         KnowledgeArticle,
         MaintenanceRecord,
         Note,
@@ -59,6 +62,7 @@ except ImportError:
         UserRole,
     )
     from schemas import (
+        AssetEventOut,
         AssetOut,
         KnowledgeArticleOut,
         MaintenanceCheckPayload,
@@ -289,6 +293,16 @@ def log_ticket_event(db: Session, ticket: Ticket, actor_id: str | None, event_ty
     db.add(event)
 
 
+def log_asset_event(db: Session, asset_id: str, actor_id: str | None, event_type: str, payload: dict[str, object] | None = None) -> None:
+    event = AssetEvent(
+        asset_id=asset_id,
+        actor_id=actor_id,
+        event_type=event_type,
+        payload_json=json.dumps(payload or {}),
+    )
+    db.add(event)
+
+
 def validate_assignment_permission(current_user: User, assignee_id: str | None) -> None:
     if current_user.role == UserRole.admin.value:
         return
@@ -493,6 +507,30 @@ def asset_to_out(asset: Asset) -> AssetOut:
         notes=asset.notes,
         createdAt=to_iso(asset.created_at),
         updatedAt=to_iso(asset.updated_at),
+    )
+
+
+def asset_event_to_out(event: AssetEvent, db: Session) -> AssetEventOut:
+    actor_email: str | None = None
+    if event.actor_id:
+        actor = db.get(User, event.actor_id)
+        actor_email = actor.email if actor else None
+    payload: dict[str, object] = {}
+    if event.payload_json:
+        try:
+            raw = json.loads(event.payload_json)
+            if isinstance(raw, dict):
+                payload = raw
+        except json.JSONDecodeError:
+            payload = {}
+    return AssetEventOut(
+        id=event.id,
+        assetId=event.asset_id,
+        actorId=event.actor_id,
+        actorEmail=actor_email,
+        eventType=event.event_type,
+        payload=payload,
+        createdAt=to_iso(event.created_at),
     )
 
 
