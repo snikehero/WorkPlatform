@@ -9,7 +9,10 @@ import { TeamCalendarPage } from "@/pages/team-calendar-page";
 import { AssetMaintenancePage } from "@/pages/asset-maintenance-page";
 import { AdminDashboardPage } from "@/pages/admin-dashboard-page";
 import { AdminUsersPage } from "@/pages/admin-users-page";
-import { TicketsPage } from "@/pages/tickets-page";
+import { TicketsCreatePage } from "@/pages/tickets-create-page";
+import { TicketsOpenPage } from "@/pages/tickets-open-page";
+import { TicketsMyPage } from "@/pages/tickets-my-page";
+import { TicketsUserDetailPage } from "@/pages/tickets-user-detail-page";
 import { TicketSolutionPage } from "@/pages/ticket-solution-page";
 import { AccountPage } from "@/pages/account-page";
 import { DailyDashboardPage } from "@/pages/daily-dashboard-page";
@@ -45,6 +48,15 @@ const TeamRoute = ({ children }: { children: React.ReactNode }) => {
   ) : (
     <Navigate to="/dashboard" replace />
   );
+};
+
+const TicketsIndexRoute = () => {
+  const auth = useAuthStore.getState();
+  if (!auth.isAuthenticated) return <Navigate to="/login" replace />;
+  if (auth.role === "admin" || auth.role === "developer") {
+    return <Navigate to="/tickets/open" replace />;
+  }
+  return <Navigate to="/tickets/create" replace />;
 };
 
 export const router = createBrowserRouter([
@@ -142,8 +154,46 @@ export const router = createBrowserRouter([
     path: "/tickets",
     element: (
       <ProtectedRoute>
+        <TicketsIndexRoute />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/tickets/create",
+    element: (
+      <ProtectedRoute>
         <AppLayout>
-          <TicketsPage />
+          <TicketsCreatePage />
+        </AppLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/tickets/open",
+    element: (
+      <TeamRoute>
+        <AppLayout>
+          <TicketsOpenPage />
+        </AppLayout>
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/tickets/my",
+    element: (
+      <ProtectedRoute>
+        <AppLayout>
+          <TicketsMyPage />
+        </AppLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/tickets/my/:ticketId",
+    element: (
+      <ProtectedRoute>
+        <AppLayout>
+          <TicketsUserDetailPage />
         </AppLayout>
       </ProtectedRoute>
     ),

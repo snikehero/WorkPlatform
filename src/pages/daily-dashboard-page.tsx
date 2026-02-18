@@ -54,7 +54,7 @@ export const DailyDashboardPage = () => {
 
   const todayTasks = useMemo(() => tasks.filter((task) => task.taskDate === today), [tasks, today]);
   const todayNotes = useMemo(() => notes.filter((note) => note.noteDate === today), [notes, today]);
-  const openTickets = useMemo(() => tickets.filter((ticket) => ticket.status !== "resolved"), [tickets]);
+  const openTickets = useMemo(() => tickets.filter((ticket) => !["resolved", "closed"].includes(ticket.status)), [tickets]);
   const overdueTasks = useMemo(
     () => tasks.filter((task) => task.taskDate < today && task.status !== "done"),
     [tasks, today]

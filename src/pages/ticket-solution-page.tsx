@@ -4,13 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n/i18n";
 import { ticketStore } from "@/stores/ticket-store";
-import type { Ticket, TicketEvidence, TicketStatus } from "@/types/ticket";
+import type { Ticket, TicketAssignee, TicketEvidence, TicketEvent, TicketStatus } from "@/types/ticket";
 
 const getStatusVariant = (status: TicketStatus) => {
-  if (status === "resolved") return "success" as const;
+  if (status === "resolved" || status === "closed") return "success" as const;
   if (status === "in_progress") return "warning" as const;
   return "info" as const;
 };
@@ -28,6 +29,9 @@ export const TicketSolutionPage = () => {
   const navigate = useNavigate();
   const { ticketId = "" } = useParams();
   const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [assignableUsers, setAssignableUsers] = useState<TicketAssignee[]>([]);
+  const [assigneeId, setAssigneeId] = useState("");
+  const [events, setEvents] = useState<TicketEvent[]>([]);
   const [resolution, setResolution] = useState("");
   const [processNotes, setProcessNotes] = useState("");
   const [evidence, setEvidence] = useState<TicketEvidence[]>([]);
@@ -35,8 +39,11 @@ export const TicketSolutionPage = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   const loadTicket = async () => {
-    const item = await ticketStore.byId(ticketId);
+    const [item, eventItems, users] = await Promise.all([ticketStore.byId(ticketId), ticketStore.events(ticketId), ticketStore.assignableUsers()]);
     setTicket(item);
+    setAssignableUsers(users);
+    setAssigneeId(item.assigneeId ?? "");
+    setEvents(eventItems);
     setResolution(item.resolution ?? "");
     setProcessNotes(item.processNotes ?? "");
     setEvidence(item.evidence ?? []);
@@ -96,6 +103,25 @@ export const TicketSolutionPage = () => {
       const updated = await ticketStore.update(ticket.id, status, resolution.trim(), processNotes.trim(), evidence);
       setTicket(updated);
       setEvidence(updated.evidence ?? []);
+      const eventItems = await ticketStore.events(ticket.id);
+      setEvents(eventItems);
+      setMessage(t("tickets.detailSaved"));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t("tickets.createFailed"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAssign = async () => {
+    if (!ticket) return;
+    setIsSaving(true);
+    setMessage(null);
+    try {
+      const updated = await ticketStore.assign(ticket.id, assigneeId || null);
+      setTicket(updated);
+      const eventItems = await ticketStore.events(ticket.id);
+      setEvents(eventItems);
       setMessage(t("tickets.detailSaved"));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t("tickets.createFailed"));
@@ -140,7 +166,41 @@ export const TicketSolutionPage = () => {
         </CardHeader>
         <CardContent className="space-y-3">
           <Badge variant={getStatusVariant(ticket.status)}>{ticket.status}</Badge>
+          <p className="text-xs text-muted-foreground">SLA: {ticket.slaState}</p>
+          <p className="text-xs text-muted-foreground">{ticket.assigneeEmail ? `Assignee: ${ticket.assigneeEmail}` : "Assignee: Unassigned"}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>
+              <option value="">Unassigned</option>
+              {assignableUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.email}
+                </option>
+              ))}
+            </Select>
+            <Button size="sm" variant="secondary" disabled={isSaving} onClick={handleAssign}>
+              Assign
+            </Button>
+          </div>
           {ticket.description ? <p className="text-sm text-muted-foreground">{ticket.description}</p> : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Timeline</CardTitle>
+          <CardDescription>Ticket status and assignment events.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {events.length === 0 ? <p className="text-sm text-muted-foreground">No events yet.</p> : null}
+          <ul className="space-y-2">
+            {events.map((event) => (
+              <li key={event.id} className="rounded border border-border px-3 py-2 text-xs text-muted-foreground">
+                <p>
+                  {new Date(event.createdAt).toLocaleString()} | {event.eventType} | {event.actorEmail ?? "system"}
+                </p>
+              </li>
+            ))}
+          </ul>
         </CardContent>
       </Card>
 
@@ -235,13 +295,19 @@ export const TicketSolutionPage = () => {
             />
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button disabled={isSaving} variant="ghost" onClick={() => handleStatusUpdate("triaged")}>
+              Triage
+            </Button>
             <Button disabled={isSaving} variant="secondary" onClick={() => handleStatusUpdate("in_progress")}>
               {t("tickets.markInProgress")}
             </Button>
             <Button disabled={isSaving} onClick={() => handleStatusUpdate("resolved")}>
               {t("tickets.resolve")}
             </Button>
-            <Button disabled={isSaving} variant="ghost" onClick={() => handleStatusUpdate("open")}>
+            <Button disabled={isSaving} variant="ghost" onClick={() => handleStatusUpdate("closed")}>
+              Close
+            </Button>
+            <Button disabled={isSaving} variant="ghost" onClick={() => handleStatusUpdate("reopened")}>
               {t("tickets.reopen")}
             </Button>
           </div>

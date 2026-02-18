@@ -102,13 +102,30 @@ class Ticket(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(50), default="help")
     priority: Mapped[str] = mapped_column(String(20), default="medium")
-    status: Mapped[str] = mapped_column(String(20), default="open")
+    status: Mapped[str] = mapped_column(String(20), default="new")
     resolution: Mapped[str] = mapped_column(Text, default="")
     process_notes: Mapped[str] = mapped_column(Text, default="")
     evidence_json: Mapped[str] = mapped_column(Text, default="[]")
     fixed_by_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    assignee_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    first_response_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolution_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class TicketEvent(Base):
+    __tablename__ = "ticket_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ticket_id: Mapped[str] = mapped_column(String(36), ForeignKey("tickets.id"), index=True)
+    actor_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(50))
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
 
 class MaintenanceRecord(Base):
@@ -430,10 +447,15 @@ class TicketEvidenceOut(BaseModel):
 
 
 class TicketPatchIn(BaseModel):
-    status: str
+    status: str | None = None
+    assigneeId: str | None = None
     resolution: str = ""
     processNotes: str | None = None
     evidence: list[TicketEvidenceIn] | None = None
+
+
+class TicketAssignIn(BaseModel):
+    assigneeId: str | None = None
 
 
 class TicketOut(BaseModel):
@@ -448,10 +470,34 @@ class TicketOut(BaseModel):
     resolution: str
     processNotes: str
     evidence: list[TicketEvidenceOut]
+    assigneeId: str | None
+    assigneeEmail: str | None
+    slaState: str
+    firstResponseDueAt: str | None
+    resolutionDueAt: str | None
+    firstRespondedAt: str | None
+    resolvedAt: str | None
+    closedAt: str | None
     fixedById: str | None
     fixedByEmail: str | None
     createdAt: str
     updatedAt: str
+
+
+class TicketEventOut(BaseModel):
+    id: str
+    ticketId: str
+    actorId: str | None
+    actorEmail: str | None
+    eventType: str
+    payload: dict[str, object]
+    createdAt: str
+
+
+class TicketAssigneeOut(BaseModel):
+    id: str
+    email: str
+    role: str
 
 
 class MaintenanceCheckPayload(BaseModel):
@@ -632,6 +678,33 @@ DEPARTMENT_OPTIONS: tuple[str, ...] = (
     "Past Employee",
 )
 
+TICKET_STATUS_VALUES: tuple[str, ...] = (
+    "new",
+    "triaged",
+    "in_progress",
+    "waiting_user",
+    "blocked",
+    "resolved",
+    "closed",
+    "reopened",
+)
+TICKET_ACTIVE_STATUSES: tuple[str, ...] = ("new", "triaged", "in_progress", "waiting_user", "blocked", "reopened")
+TICKET_RESOLUTION_STATUSES: tuple[str, ...] = ("resolved", "closed")
+TICKET_TRANSITIONS: dict[str, set[str]] = {
+    "new": {"triaged", "in_progress", "blocked", "resolved"},
+    "triaged": {"in_progress", "waiting_user", "blocked", "resolved"},
+    "in_progress": {"waiting_user", "blocked", "resolved"},
+    "waiting_user": {"in_progress", "blocked", "resolved"},
+    "blocked": {"triaged", "in_progress", "waiting_user", "resolved"},
+    "resolved": {"closed", "reopened"},
+    "closed": {"reopened"},
+    "reopened": {"triaged", "in_progress", "waiting_user", "blocked", "resolved"},
+}
+TICKET_PRIORITY_VALUES: tuple[str, ...] = ("low", "medium", "high", "critical")
+TICKET_CATEGORY_VALUES: tuple[str, ...] = ("printer", "help", "network", "software", "hardware", "access")
+TICKET_FIRST_RESPONSE_SLA_HOURS: dict[str, int] = {"low": 24, "medium": 8, "high": 2, "critical": 1}
+TICKET_RESOLUTION_SLA_HOURS: dict[str, int] = {"low": 72, "medium": 24, "high": 8, "critical": 4}
+
 
 def normalize_department(value: str) -> str:
     raw = (value or "").strip()
@@ -699,6 +772,78 @@ def normalize_assigned_user(value: str | None) -> str:
     return assigned if assigned else UNASSIGNED_USER_LABEL
 
 
+def normalize_ticket_category(value: str) -> str:
+    category = (value or "").strip().lower()
+    if category not in TICKET_CATEGORY_VALUES:
+        allowed = "|".join(TICKET_CATEGORY_VALUES)
+        raise HTTPException(status_code=400, detail=f"category must be {allowed}")
+    return category
+
+
+def normalize_ticket_priority(value: str) -> str:
+    priority = (value or "").strip().lower()
+    if priority not in TICKET_PRIORITY_VALUES:
+        allowed = "|".join(TICKET_PRIORITY_VALUES)
+        raise HTTPException(status_code=400, detail=f"priority must be {allowed}")
+    return priority
+
+
+def normalize_ticket_status(value: str) -> str:
+    status_value = (value or "").strip().lower()
+    if status_value not in TICKET_STATUS_VALUES:
+        allowed = "|".join(TICKET_STATUS_VALUES)
+        raise HTTPException(status_code=400, detail=f"status must be {allowed}")
+    return status_value
+
+
+def validate_ticket_transition(current: str, target: str) -> None:
+    if current == target:
+        return
+    allowed = TICKET_TRANSITIONS.get(current, set())
+    if target not in allowed:
+        raise HTTPException(status_code=400, detail=f"invalid transition {current}->{target}")
+
+
+def calculate_ticket_deadlines(priority: str, created_at: datetime) -> tuple[datetime, datetime]:
+    first_due = created_at + timedelta(hours=TICKET_FIRST_RESPONSE_SLA_HOURS[priority])
+    resolution_due = created_at + timedelta(hours=TICKET_RESOLUTION_SLA_HOURS[priority])
+    return first_due, resolution_due
+
+
+def compute_ticket_sla_state(ticket: Ticket) -> str:
+    if ticket.status in TICKET_RESOLUTION_STATUSES:
+        return "completed"
+    now = datetime.now(timezone.utc)
+    due = ticket.resolution_due_at
+    if due is None:
+        return "on_track"
+    if due <= now:
+        return "breached"
+    if due <= now + timedelta(hours=2):
+        return "at_risk"
+    return "on_track"
+
+
+def log_ticket_event(db: Session, ticket: Ticket, actor_id: str | None, event_type: str, payload: dict[str, object] | None = None) -> None:
+    event = TicketEvent(
+        ticket_id=ticket.id,
+        actor_id=actor_id,
+        event_type=event_type,
+        payload_json=json.dumps(payload or {}),
+    )
+    db.add(event)
+
+
+def validate_assignment_permission(current_user: User, assignee_id: str | None) -> None:
+    if current_user.role == UserRole.admin.value:
+        return
+    if current_user.role == UserRole.developer.value:
+        if assignee_id is None or assignee_id == current_user.id:
+            return
+        raise HTTPException(status_code=403, detail="Developers can only assign tickets to themselves")
+    raise HTTPException(status_code=403, detail="Only admin or developer can assign tickets")
+
+
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != UserRole.admin.value:
         raise HTTPException(status_code=403, detail="Admin role required")
@@ -752,6 +897,7 @@ def team_event_to_out(event: TeamEvent) -> TeamEventOut:
 def ticket_to_out(ticket: Ticket, db: Session) -> TicketOut:
     requester = db.get(User, ticket.requester_id)
     fixed_by = db.get(User, ticket.fixed_by_id) if ticket.fixed_by_id else None
+    assignee = db.get(User, ticket.assignee_id) if ticket.assignee_id else None
     evidence_items: list[TicketEvidenceOut] = []
     if ticket.evidence_json:
         try:
@@ -784,10 +930,42 @@ def ticket_to_out(ticket: Ticket, db: Session) -> TicketOut:
         resolution=ticket.resolution,
         processNotes=ticket.process_notes,
         evidence=evidence_items,
+        assigneeId=ticket.assignee_id,
+        assigneeEmail=assignee.email if assignee else None,
+        slaState=compute_ticket_sla_state(ticket),
+        firstResponseDueAt=to_iso(ticket.first_response_due_at) if ticket.first_response_due_at else None,
+        resolutionDueAt=to_iso(ticket.resolution_due_at) if ticket.resolution_due_at else None,
+        firstRespondedAt=to_iso(ticket.first_responded_at) if ticket.first_responded_at else None,
+        resolvedAt=to_iso(ticket.resolved_at) if ticket.resolved_at else None,
+        closedAt=to_iso(ticket.closed_at) if ticket.closed_at else None,
         fixedById=ticket.fixed_by_id,
         fixedByEmail=fixed_by.email if fixed_by else None,
         createdAt=to_iso(ticket.created_at),
         updatedAt=to_iso(ticket.updated_at),
+    )
+
+
+def ticket_event_to_out(event: TicketEvent, db: Session) -> TicketEventOut:
+    actor_email: str | None = None
+    if event.actor_id:
+        actor = db.get(User, event.actor_id)
+        actor_email = actor.email if actor else None
+    payload: dict[str, object] = {}
+    if event.payload_json:
+        try:
+            raw = json.loads(event.payload_json)
+            if isinstance(raw, dict):
+                payload = raw
+        except json.JSONDecodeError:
+            payload = {}
+    return TicketEventOut(
+        id=event.id,
+        ticketId=event.ticket_id,
+        actorId=event.actor_id,
+        actorEmail=actor_email,
+        eventType=event.event_type,
+        payload=payload,
+        createdAt=to_iso(event.created_at),
     )
 
 
@@ -910,6 +1088,14 @@ def on_startup():
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'help'"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS process_notes TEXT DEFAULT ''"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '[]'"))
+        conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assignee_id VARCHAR(36)"))
+        conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS first_response_due_at TIMESTAMPTZ"))
+        conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolution_due_at TIMESTAMPTZ"))
+        conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS first_responded_at TIMESTAMPTZ"))
+        conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ"))
+        conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_assignee_id ON tickets (assignee_id)"))
+        conn.execute(text("UPDATE tickets SET status = 'new' WHERE status = 'open'"))
         conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS qr_code VARCHAR(250) DEFAULT ''"))
         conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS manufacturer VARCHAR(120) DEFAULT ''"))
         conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS model VARCHAR(120) DEFAULT ''"))
@@ -1570,25 +1756,52 @@ def list_my_tickets(current_user: User = Depends(get_current_user), db: Session 
     return [ticket_to_out(item, db) for item in tickets]
 
 
+@app.get("/api/tickets/mine/{ticket_id}", response_model=TicketOut)
+def get_my_ticket(ticket_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ticket = db.scalar(select(Ticket).where(Ticket.id == ticket_id, Ticket.requester_id == current_user.id))
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return ticket_to_out(ticket, db)
+
+
+@app.get("/api/tickets/mine/{ticket_id}/events", response_model=list[TicketEventOut])
+def list_my_ticket_events(ticket_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ticket = db.scalar(select(Ticket).where(Ticket.id == ticket_id, Ticket.requester_id == current_user.id))
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    events = db.scalars(
+        select(TicketEvent).where(TicketEvent.ticket_id == ticket_id).order_by(TicketEvent.created_at.asc())
+    ).all()
+    return [ticket_event_to_out(item, db) for item in events]
+
+
 @app.post("/api/tickets", response_model=TicketOut)
 def create_ticket(payload: TicketIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    category = payload.category.strip().lower()
-    if category not in ("printer", "help", "network", "software", "hardware", "access"):
-        raise HTTPException(status_code=400, detail="category must be printer|help|network|software|hardware|access")
-    priority = payload.priority.lower()
-    if priority not in ("low", "medium", "high", "critical"):
-        raise HTTPException(status_code=400, detail="priority must be low|medium|high|critical")
+    category = normalize_ticket_category(payload.category)
+    priority = normalize_ticket_priority(payload.priority)
+    now = datetime.now(timezone.utc)
+    first_due, resolution_due = calculate_ticket_deadlines(priority, now)
     ticket = Ticket(
         requester_id=current_user.id,
         title=payload.title,
         description=payload.description,
         category=category,
         priority=priority,
-        status="open",
+        status="new",
         process_notes="",
         evidence_json="[]",
+        first_response_due_at=first_due,
+        resolution_due_at=resolution_due,
     )
     db.add(ticket)
+    db.flush()
+    log_ticket_event(
+        db,
+        ticket,
+        current_user.id,
+        "created",
+        {"status": ticket.status, "priority": priority, "category": category},
+    )
     db.commit()
     db.refresh(ticket)
     return ticket_to_out(ticket, db)
@@ -1598,10 +1811,43 @@ def create_ticket(payload: TicketIn, current_user: User = Depends(get_current_us
 def list_open_tickets(_: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
     tickets = db.scalars(
         select(Ticket)
-        .where(Ticket.status.in_(["open", "in_progress"]))
+        .where(Ticket.status.in_(TICKET_ACTIVE_STATUSES))
         .order_by(Ticket.created_at.asc())
     ).all()
     return [ticket_to_out(item, db) for item in tickets]
+
+
+@app.get("/api/tickets/open-unassigned", response_model=list[TicketOut])
+def list_open_unassigned_tickets(_: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+    tickets = db.scalars(
+        select(Ticket)
+        .where(Ticket.status.in_(TICKET_ACTIVE_STATUSES), Ticket.assignee_id.is_(None))
+        .order_by(Ticket.created_at.asc())
+    ).all()
+    return [ticket_to_out(item, db) for item in tickets]
+
+
+@app.get("/api/tickets/assigned-mine", response_model=list[TicketOut])
+def list_assigned_my_tickets(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+    tickets = db.scalars(
+        select(Ticket)
+        .where(Ticket.assignee_id == current_user.id)
+        .order_by(Ticket.updated_at.desc())
+    ).all()
+    return [ticket_to_out(item, db) for item in tickets]
+
+
+@app.get("/api/tickets/assignable-users", response_model=list[TicketAssigneeOut])
+def list_ticket_assignable_users(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+    if current_user.role == UserRole.admin.value:
+        items = db.scalars(
+            select(User)
+            .where(User.role.in_([UserRole.admin.value, UserRole.developer.value]))
+            .order_by(User.email.asc())
+        ).all()
+    else:
+        items = [current_user]
+    return [TicketAssigneeOut(id=item.id, email=item.email, role=item.role) for item in items]
 
 
 @app.get("/api/tickets/{ticket_id}", response_model=TicketOut)
@@ -1619,12 +1865,23 @@ def patch_ticket(ticket_id: str, payload: TicketPatchIn, current_user: User = De
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    status_value = payload.status.lower()
-    if status_value not in ("open", "in_progress", "resolved"):
-        raise HTTPException(status_code=400, detail="status must be open|in_progress|resolved")
-
-    ticket.status = status_value
+    next_status = normalize_ticket_status(payload.status) if payload.status is not None else ticket.status
+    validate_ticket_transition(ticket.status, next_status)
+    previous_status = ticket.status
+    ticket.status = next_status
     ticket.resolution = payload.resolution
+    if payload.assigneeId is not None:
+        requested_assignee_id = payload.assigneeId if payload.assigneeId != "" else None
+        validate_assignment_permission(current_user, requested_assignee_id)
+        if payload.assigneeId == "":
+            ticket.assignee_id = None
+        else:
+            assignee = db.get(User, payload.assigneeId)
+            if not assignee:
+                raise HTTPException(status_code=404, detail="Assignee not found")
+            if assignee.role not in (UserRole.admin.value, UserRole.developer.value):
+                raise HTTPException(status_code=400, detail="Assignee must be admin or developer")
+            ticket.assignee_id = assignee.id
     if payload.processNotes is not None:
         ticket.process_notes = payload.processNotes
     if payload.evidence is not None:
@@ -1643,11 +1900,66 @@ def patch_ticket(ticket_id: str, payload: TicketPatchIn, current_user: User = De
                 }
             )
         ticket.evidence_json = json.dumps(normalized_evidence)
+    now = datetime.now(timezone.utc)
+    if ticket.status in ("in_progress", "triaged") and ticket.first_responded_at is None:
+        ticket.first_responded_at = now
+    if ticket.status == "resolved":
+        ticket.resolved_at = now
+        ticket.closed_at = None
+    if ticket.status == "closed":
+        ticket.closed_at = now
+    if ticket.status == "reopened":
+        ticket.resolved_at = None
+        ticket.closed_at = None
     ticket.updated_at = datetime.now(timezone.utc)
-    ticket.fixed_by_id = current_user.id if status_value in ("in_progress", "resolved") else None
+    ticket.fixed_by_id = current_user.id if ticket.status in ("in_progress", "resolved", "closed") else None
+    log_ticket_event(
+        db,
+        ticket,
+        current_user.id,
+        "updated",
+        {
+            "previousStatus": previous_status,
+            "status": ticket.status,
+            "assigneeId": ticket.assignee_id,
+        },
+    )
     db.commit()
     db.refresh(ticket)
     return ticket_to_out(ticket, db)
+
+
+@app.patch("/api/tickets/{ticket_id}/assign", response_model=TicketOut)
+def assign_ticket(ticket_id: str, payload: TicketAssignIn, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+    ticket = db.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    validate_assignment_permission(current_user, payload.assigneeId)
+    if payload.assigneeId is None:
+        ticket.assignee_id = None
+    else:
+        assignee = db.get(User, payload.assigneeId)
+        if not assignee:
+            raise HTTPException(status_code=404, detail="Assignee not found")
+        if assignee.role not in (UserRole.admin.value, UserRole.developer.value):
+            raise HTTPException(status_code=400, detail="Assignee must be admin or developer")
+        ticket.assignee_id = assignee.id
+    ticket.updated_at = datetime.now(timezone.utc)
+    log_ticket_event(db, ticket, current_user.id, "assigned", {"assigneeId": ticket.assignee_id})
+    db.commit()
+    db.refresh(ticket)
+    return ticket_to_out(ticket, db)
+
+
+@app.get("/api/tickets/{ticket_id}/events", response_model=list[TicketEventOut])
+def list_ticket_events(ticket_id: str, _: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+    ticket = db.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    events = db.scalars(
+        select(TicketEvent).where(TicketEvent.ticket_id == ticket_id).order_by(TicketEvent.created_at.asc())
+    ).all()
+    return [ticket_event_to_out(item, db) for item in events]
 
 
 @app.get("/api/maintenance-records", response_model=list[MaintenanceRecordOut])

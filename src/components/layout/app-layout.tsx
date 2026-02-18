@@ -13,12 +13,14 @@ const SECTION_OPEN_KEY = "workplatform-sidebar-sections";
 type SectionState = {
   personal: boolean;
   work: boolean;
+  tickets: boolean;
   assets: boolean;
 };
 
 const DEFAULT_SECTION_STATE: SectionState = {
   personal: true,
   work: true,
+  tickets: true,
   assets: true,
 };
 
@@ -41,6 +43,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
       return {
         personal: parsed.personal ?? true,
         work: parsed.work ?? true,
+        tickets: parsed.tickets ?? true,
         assets: parsed.assets ?? true,
       };
     } catch {
@@ -70,11 +73,11 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(SECTION_OPEN_KEY, JSON.stringify(sectionOpen));
   }, [sectionOpen]);
 
-  const toggleSection = (section: "personal" | "work" | "assets") => {
+  const toggleSection = (section: "personal" | "work" | "tickets" | "assets") => {
     setSectionOpen((current) => ({ ...current, [section]: !current[section] }));
   };
 
-  const renderSectionHeader = (section: "personal" | "work" | "assets", label: string) => {
+  const renderSectionHeader = (section: "personal" | "work" | "tickets" | "assets", label: string) => {
     if (!isSidebarOpen) return null;
     return (
       <button
@@ -210,18 +213,6 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     </>
                   ) : null}
                   <NavLink
-                    to="/tickets"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.tickets")}
-                  </NavLink>
-                  <NavLink
                     to="/notifications"
                     className={({ isActive }) =>
                       `block rounded-md px-2 py-2 text-sm ${
@@ -247,6 +238,53 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                       {t("nav.knowledgeBase")}
                     </NavLink>
                   ) : null}
+                </nav>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              {renderSectionHeader("tickets", t("nav.ticketsSection"))}
+              {(!isSidebarOpen || sectionOpen.tickets) ? (
+                <nav className="space-y-1">
+                  <NavLink
+                    to="/tickets/create"
+                    className={({ isActive }) =>
+                      `block rounded-md px-2 py-2 text-sm ${
+                        isActive
+                          ? "bg-muted text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`
+                    }
+                  >
+                    {t("nav.ticketsCreate")}
+                  </NavLink>
+                  {(userRole === "admin" || userRole === "developer") ? (
+                    <>
+                      <NavLink
+                        to="/tickets/open"
+                        className={({ isActive }) =>
+                          `block rounded-md px-2 py-2 text-sm ${
+                            isActive
+                              ? "bg-muted text-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`
+                        }
+                      >
+                        {t("nav.ticketsOpen")}
+                      </NavLink>
+                    </>
+                  ) : null}
+                  <NavLink
+                    to="/tickets/my"
+                    className={({ isActive }) =>
+                      `block rounded-md px-2 py-2 text-sm ${
+                        isActive
+                          ? "bg-muted text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`
+                    }
+                  >
+                    {t("nav.ticketsMy")}
+                  </NavLink>
                 </nav>
               ) : null}
             </div>
