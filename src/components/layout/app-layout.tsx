@@ -314,6 +314,18 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     {t("nav.userManagement")}
                   </NavLink>
                   <NavLink
+                    to="/admin/people"
+                    className={({ isActive }) =>
+                      `block rounded-md px-2 py-2 text-sm ${
+                        isActive
+                          ? "bg-muted text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`
+                    }
+                  >
+                    {t("nav.peopleDirectory")}
+                  </NavLink>
+                  <NavLink
                     to="/admin/users"
                     className={({ isActive }) =>
                       `block rounded-md px-2 py-2 text-sm ${

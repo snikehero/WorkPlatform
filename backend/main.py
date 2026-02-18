@@ -1084,13 +1084,11 @@ def generate_placeholder_email(name: str, db: Session) -> str:
     base = "".join(ch for ch in name.lower() if ch.isalnum())
     if not base:
         base = "user"
-    base = base[:24]
-    for _ in range(15):
-        candidate = f"{base}{uuid.uuid4().hex[:6]}@tdcon40.com"
-        exists = db.scalar(select(User).where(User.email == candidate))
-        if not exists:
-            return candidate
-    return f"user{uuid.uuid4().hex[:8]}@tdcon40.com"
+    candidate = f"{base}@tdcon40.com"
+    exists = db.scalar(select(User).where(User.email == candidate))
+    if exists:
+        raise HTTPException(status_code=409, detail="Generated username already exists for this name; provide email manually")
+    return candidate
 
 
 def resolve_person_user_email(raw_email: str, name: str, db: Session, exclude_user_id: str | None = None) -> str:

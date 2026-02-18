@@ -18,6 +18,7 @@ import { KnowledgeBasePage } from "@/pages/knowledge-base-page";
 import { AssetInventoryPage } from "@/pages/asset-inventory-page";
 import { AssetListPage } from "@/pages/asset-list-page";
 import { UserManagementPage } from "@/pages/user-management-page";
+import { PeopleDirectoryPage } from "@/pages/people-directory-page";
 import { useAuthStore } from "@/stores/auth-store";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -231,6 +232,16 @@ export const router = createBrowserRouter([
       <AdminRoute>
         <AppLayout>
           <UserManagementPage />
+        </AppLayout>
+      </AdminRoute>
+    ),
+  },
+  {
+    path: "/admin/people",
+    element: (
+      <AdminRoute>
+        <AppLayout>
+          <PeopleDirectoryPage />
         </AppLayout>
       </AdminRoute>
     ),

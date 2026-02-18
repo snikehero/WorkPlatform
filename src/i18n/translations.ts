@@ -25,6 +25,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "nav.assetsList": "List Assets",
     "nav.dashboard": "Dashboard",
     "nav.userManagement": "User Management",
+    "nav.peopleDirectory": "People Directory",
     "nav.adminUsers": "Users",
     "common.logout": "Logout",
     "common.light": "Light",
@@ -330,6 +331,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "people.searchPlaceholder": "Search by name, email, title, role, department, or mobile...",
     "people.empty": "No people found.",
     "people.edit": "Edit",
+    "people.actions": "Actions",
 
     "account.title": "Account",
     "account.subtitle": "Update your login password and language preference.",
@@ -468,6 +470,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "nav.assetsList": "Lista de Activos",
     "nav.dashboard": "Panel",
     "nav.userManagement": "Gestion de Usuarios",
+    "nav.peopleDirectory": "Directorio de Personas",
     "nav.adminUsers": "Usuarios",
     "common.logout": "Cerrar sesion",
     "common.light": "Claro",
@@ -773,6 +776,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "people.searchPlaceholder": "Buscar por nombre, correo, puesto, rol, departamento o movil...",
     "people.empty": "No se encontraron personas.",
     "people.edit": "Editar",
+    "people.actions": "Acciones",
 
     "account.title": "Cuenta",
     "account.subtitle": "Actualiza tu contrasena y preferencia de idioma.",
