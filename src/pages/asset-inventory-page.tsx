@@ -5,13 +5,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { assetStore } from "@/stores/asset-store";
+import { peopleStore } from "@/stores/people-store";
 import type { Asset, AssetStatus } from "@/types/asset";
+import type { ManagedPerson } from "@/types/person";
 import { useI18n } from "@/i18n/i18n";
 
 type AssetDraft = {
   assetTag: string;
   qrCode: string;
+  qrClass: "A" | "B" | "C";
   location: string;
   serialNumber: string;
   category: string;
@@ -21,6 +25,7 @@ type AssetDraft = {
   status: AssetStatus;
   user: string;
   condition: string;
+  notes: string;
 };
 
 const LOCATION_OPTIONS = [
@@ -51,6 +56,9 @@ const SUPPLIER_OPTIONS = [
   "TDC-ALMACEN",
 ];
 
+const UNASSIGNED_USER = "Unassigned";
+const QR_CLASS_OPTIONS = ["A", "B", "C"] as const;
+
 const getNextAssetTag = (items: Asset[]) => {
   let highest = 0;
   for (const item of items) {
@@ -62,9 +70,31 @@ const getNextAssetTag = (items: Asset[]) => {
   return `TDC-${String(highest + 1).padStart(4, "0")}`;
 };
 
+const getCurrentYear2Digits = () => String(new Date().getFullYear() % 100).padStart(2, "0");
+
+const getAssetTagConsecutive = (assetTag: string) => {
+  const match = /^TDC-(\d{4,})$/i.exec(assetTag.trim());
+  if (!match) return 1;
+  const value = Number.parseInt(match[1], 10);
+  return Number.isFinite(value) ? value : 1;
+};
+
+const buildQrCode = (assetTag: string, qrClass: "A" | "B" | "C") =>
+  `TDC-${getCurrentYear2Digits()}-${String(getAssetTagConsecutive(assetTag)).padStart(4, "0")}-${qrClass}`;
+
+const buildQrImageUrl = (value: string, size: number) =>
+  `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}`;
+
+const parseQrClass = (qrCode: string): "A" | "B" | "C" => {
+  const match = /^TDC-\d{2}-\d{4}-([ABC])$/i.exec((qrCode || "").trim());
+  if (!match) return "A";
+  return match[1].toUpperCase() as "A" | "B" | "C";
+};
+
 const EMPTY_DRAFT: AssetDraft = {
   assetTag: "",
   qrCode: "",
+  qrClass: "A",
   location: "",
   serialNumber: "",
   category: "",
@@ -72,8 +102,9 @@ const EMPTY_DRAFT: AssetDraft = {
   model: "",
   supplier: "",
   status: "active",
-  user: "",
+  user: UNASSIGNED_USER,
   condition: "",
+  notes: "",
 };
 
 export const AssetInventoryPage = () => {
@@ -82,9 +113,11 @@ export const AssetInventoryPage = () => {
   const { assetId } = useParams<{ assetId: string }>();
   const isEditMode = Boolean(assetId);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [people, setPeople] = useState<ManagedPerson[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [draft, setDraft] = useState<AssetDraft>(EMPTY_DRAFT);
   const nextAssetTag = useMemo(() => getNextAssetTag(assets), [assets]);
+  const qrPreviewUrl = useMemo(() => buildQrImageUrl(draft.qrCode, 240), [draft.qrCode]);
   const manufacturerOptions = useMemo(
     () =>
       Array.from(
@@ -108,18 +141,35 @@ export const AssetInventoryPage = () => {
     [assets]
   );
 
+  const peopleOptions = useMemo(
+    () => [...people].sort((a, b) => a.name.localeCompare(b.name, "es-MX")),
+    [people]
+  );
+
   const loadAssets = async () => {
     const data = await assetStore.all();
     setAssets(data);
   };
 
+  const loadPeople = async () => {
+    const data = await peopleStore.all();
+    setPeople(data);
+  };
+
   useEffect(() => {
-    loadAssets().catch(() => setAssets([]));
+    Promise.all([loadAssets(), loadPeople()]).catch(() => {
+      setAssets([]);
+      setPeople([]);
+    });
   }, []);
 
   useEffect(() => {
     if (isEditMode) return;
-    setDraft((current) => ({ ...current, assetTag: nextAssetTag }));
+    setDraft((current) => ({
+      ...current,
+      assetTag: nextAssetTag,
+      qrCode: buildQrCode(nextAssetTag, current.qrClass),
+    }));
   }, [isEditMode, nextAssetTag]);
 
   useEffect(() => {
@@ -129,6 +179,7 @@ export const AssetInventoryPage = () => {
     setDraft({
       assetTag: item.assetTag,
       qrCode: item.qrCode,
+      qrClass: parseQrClass(item.qrCode),
       location: item.location,
       serialNumber: item.serialNumber,
       category: item.category,
@@ -136,8 +187,9 @@ export const AssetInventoryPage = () => {
       model: item.model,
       supplier: item.supplier,
       status: item.status,
-      user: item.user,
+      user: item.user || UNASSIGNED_USER,
       condition: item.condition,
+      notes: item.notes || "",
     });
   }, [assetId, assets, isEditMode]);
 
@@ -146,8 +198,23 @@ export const AssetInventoryPage = () => {
       navigate("/assets/list");
       return;
     }
-    setDraft({ ...EMPTY_DRAFT, assetTag: nextAssetTag });
+    setDraft({
+      ...EMPTY_DRAFT,
+      assetTag: nextAssetTag,
+      qrCode: buildQrCode(nextAssetTag, EMPTY_DRAFT.qrClass),
+    });
   };
+
+  useEffect(() => {
+    if (isEditMode) {
+      setDraft((current) => ({
+        ...current,
+        qrCode: buildQrCode(current.assetTag, current.qrClass),
+      }));
+      return;
+    }
+    setDraft((current) => ({ ...current, qrCode: buildQrCode(current.assetTag, current.qrClass) }));
+  }, [draft.qrClass, draft.assetTag, isEditMode]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -176,6 +243,24 @@ export const AssetInventoryPage = () => {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t("assets.saveFailed"));
     }
+  };
+
+  const openQrInNewTab = () => {
+    window.open(qrPreviewUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const downloadQr = async () => {
+    const response = await fetch(qrPreviewUrl);
+    if (!response.ok) throw new Error("Failed to generate QR");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${draft.qrCode || "asset-qr"}.png`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -209,8 +294,24 @@ export const AssetInventoryPage = () => {
                 <Input
                   id="asset-qr-code"
                   value={draft.qrCode}
-                  onChange={(event) => setDraft((current) => ({ ...current, qrCode: event.target.value }))}
+                  readOnly
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="asset-qr-class">{t("assets.qrClass")}</Label>
+                <Select
+                  id="asset-qr-class"
+                  value={draft.qrClass}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, qrClass: event.target.value as "A" | "B" | "C" }))
+                  }
+                >
+                  {QR_CLASS_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="asset-location">{t("common.location")}</Label>
@@ -314,11 +415,18 @@ export const AssetInventoryPage = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="asset-user">{t("assets.user")}</Label>
-                <Input
+                <Select
                   id="asset-user"
                   value={draft.user}
                   onChange={(event) => setDraft((current) => ({ ...current, user: event.target.value }))}
-                />
+                >
+                  <option value={UNASSIGNED_USER}>{t("assets.unassigned")}</option>
+                  {peopleOptions.map((person) => (
+                    <option key={person.id} value={person.name}>
+                      {person.name}
+                    </option>
+                  ))}
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="asset-condition">{t("assets.condition")}</Label>
@@ -328,11 +436,32 @@ export const AssetInventoryPage = () => {
                   onChange={(event) => setDraft((current) => ({ ...current, condition: event.target.value }))}
                 />
               </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="asset-notes">{t("assets.notes")}</Label>
+                <Textarea
+                  id="asset-notes"
+                  value={draft.notes}
+                  onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
+                  rows={6}
+                />
+              </div>
               <div className="flex flex-wrap gap-2 sm:col-span-2">
                 <Button type="submit">{isEditMode ? t("common.save") : t("assets.create")}</Button>
                 <Button type="button" variant="secondary" onClick={resetForm}>
                   {isEditMode ? t("assets.cancelEdit") : t("common.clear")}
                 </Button>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>{t("assets.generateQr")}</Label>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" onClick={openQrInNewTab}>
+                    {t("assets.generateQr")}
+                  </Button>
+                  <Button type="button" onClick={() => downloadQr().catch(() => setMessage(t("assets.qrDownloadFailed")))}>
+                    {t("assets.downloadQr")}
+                  </Button>
+                </div>
+                <img src={qrPreviewUrl} alt={`QR ${draft.qrCode}`} className="h-32 w-32 rounded border border-border p-1" />
               </div>
           </form>
           {message ? <p className="mt-3 text-sm text-muted-foreground">{message}</p> : null}

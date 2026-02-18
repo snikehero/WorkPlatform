@@ -316,7 +316,7 @@ export const AssetListPage = () => {
                           {t(`assets.status.${item.status}`)}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2">{item.user || "-"}</td>
+                      <td className="px-3 py-2">{item.user || t("assets.unassigned")}</td>
                       <td className="px-3 py-2">{item.condition || "-"}</td>
                       <td className="px-3 py-2">
                         <div className="flex gap-2">

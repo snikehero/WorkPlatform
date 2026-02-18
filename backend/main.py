@@ -533,6 +533,7 @@ class KnowledgeArticleOut(BaseModel):
 class AssetIn(BaseModel):
     assetTag: str = ""
     qrCode: str = ""
+    qrClass: str = "A"
     location: str = ""
     serialNumber: str = ""
     category: str = ""
@@ -542,6 +543,7 @@ class AssetIn(BaseModel):
     status: str = "active"
     user: str = ""
     condition: str = ""
+    notes: str = ""
 
 
 class AssetOut(BaseModel):
@@ -557,6 +559,7 @@ class AssetOut(BaseModel):
     status: str
     user: str
     condition: str
+    notes: str
     createdAt: str
     updatedAt: str
 
@@ -568,6 +571,9 @@ class ChangePasswordIn(BaseModel):
 
 class LanguagePreferenceIn(BaseModel):
     preferredLanguage: str
+
+
+UNASSIGNED_USER_LABEL = "Unassigned"
 
 
 def parse_date(value: str) -> date:
@@ -623,6 +629,7 @@ DEPARTMENT_OPTIONS: tuple[str, ...] = (
     "Desarrollo",
     "Electricidad y Fuerza",
     "Administracion de Proyectos",
+    "Past Employee",
 )
 
 
@@ -652,6 +659,23 @@ def build_next_asset_tag(db: Session) -> str:
     return f"TDC-{highest + 1:04d}"
 
 
+def normalize_qr_class(value: str | None) -> str:
+    qr_class = (value or "A").strip().upper()
+    if qr_class not in ("A", "B", "C"):
+        raise HTTPException(status_code=400, detail="qrClass must be A|B|C")
+    return qr_class
+
+
+def build_qr_code_from_asset_tag(asset_tag: str, qr_class: str) -> str:
+    tag_match = re.match(r"^TDC-(\d{4,})$", (asset_tag or "").strip(), flags=re.IGNORECASE)
+    if not tag_match:
+        raise HTTPException(status_code=400, detail="assetTag must match TDC-####")
+    consecutive = int(tag_match.group(1))
+    current_year = datetime.now(timezone.utc).year % 100
+    year_segment = f"{current_year:02d}"
+    return f"TDC-{year_segment}-{consecutive:04d}-{qr_class}"
+
+
 def normalize_login_identity(value: str) -> str:
     raw = (value or "").strip().lower()
     if not raw:
@@ -668,6 +692,11 @@ def username_from_email(value: str) -> str:
 
 def to_iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat()
+
+
+def normalize_assigned_user(value: str | None) -> str:
+    assigned = (value or "").strip()
+    return assigned if assigned else UNASSIGNED_USER_LABEL
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
@@ -814,6 +843,7 @@ def article_to_out(article: KnowledgeArticle) -> KnowledgeArticleOut:
 
 
 def asset_to_out(asset: Asset) -> AssetOut:
+    assigned_user = normalize_assigned_user(asset.user_name)
     return AssetOut(
         id=asset.id,
         assetTag=asset.asset_tag,
@@ -825,8 +855,9 @@ def asset_to_out(asset: Asset) -> AssetOut:
         model=asset.model,
         supplier=asset.supplier,
         status=asset.status,
-        user=asset.user_name,
+        user=assigned_user,
         condition=asset.condition,
+        notes=asset.notes,
         createdAt=to_iso(asset.created_at),
         updatedAt=to_iso(asset.updated_at),
     )
@@ -885,6 +916,8 @@ def on_startup():
         conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS supplier VARCHAR(120) DEFAULT ''"))
         conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS user_name VARCHAR(250) DEFAULT ''"))
         conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS condition VARCHAR(120) DEFAULT ''"))
+        conn.execute(text("UPDATE assets SET user_name = 'Unassigned' WHERE btrim(coalesce(user_name, '')) = ''"))
+        conn.execute(text("UPDATE assets SET assigned_to = 'Unassigned' WHERE btrim(coalesce(assigned_to, '')) = ''"))
         conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS legacy_id INTEGER"))
         conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS user_id VARCHAR(36)"))
         conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS type VARCHAR(10) DEFAULT 'user'"))
@@ -1405,12 +1438,15 @@ def create_asset(payload: AssetIn, current_user: User = Depends(get_current_user
     if status_value not in ("active", "maintenance", "retired", "lost"):
         raise HTTPException(status_code=400, detail="status must be active|maintenance|retired|lost")
 
+    assigned_user = normalize_assigned_user(payload.user)
+    qr_class = normalize_qr_class(payload.qrClass)
     generated_tag = build_next_asset_tag(db)
+    generated_qr = build_qr_code_from_asset_tag(generated_tag, qr_class)
     item = Asset(
         owner_id=current_user.id,
         asset_tag=generated_tag,
         name=payload.model.strip() or payload.serialNumber.strip().upper() or generated_tag,
-        qr_code=payload.qrCode.strip(),
+        qr_code=generated_qr,
         location=payload.location.strip(),
         serial_number=payload.serialNumber.strip().upper(),
         category=payload.category.strip(),
@@ -1418,11 +1454,11 @@ def create_asset(payload: AssetIn, current_user: User = Depends(get_current_user
         model=payload.model.strip(),
         supplier=payload.supplier.strip(),
         status=status_value,
-        assigned_to=payload.user.strip(),
+        assigned_to=assigned_user,
         purchase_date=None,
         warranty_until=None,
-        notes=payload.condition.strip(),
-        user_name=payload.user.strip(),
+        notes=payload.notes.strip(),
+        user_name=assigned_user,
         condition=payload.condition.strip(),
     )
     db.add(item)
@@ -1444,8 +1480,12 @@ def update_asset(asset_id: str, payload: AssetIn, current_user: User = Depends(g
     if status_value not in ("active", "maintenance", "retired", "lost"):
         raise HTTPException(status_code=400, detail="status must be active|maintenance|retired|lost")
 
+    assigned_user = normalize_assigned_user(payload.user)
+    qr_class = normalize_qr_class(payload.qrClass)
+    qr_code_value = build_qr_code_from_asset_tag(item.asset_tag, qr_class)
+
     item.name = payload.model.strip() or payload.serialNumber.strip().upper() or item.asset_tag
-    item.qr_code = payload.qrCode.strip()
+    item.qr_code = qr_code_value
     item.location = payload.location.strip()
     item.serial_number = payload.serialNumber.strip().upper()
     item.category = payload.category.strip()
@@ -1453,11 +1493,11 @@ def update_asset(asset_id: str, payload: AssetIn, current_user: User = Depends(g
     item.model = payload.model.strip()
     item.supplier = payload.supplier.strip()
     item.status = status_value
-    item.assigned_to = payload.user.strip()
+    item.assigned_to = assigned_user
     item.purchase_date = None
     item.warranty_until = None
-    item.notes = payload.condition.strip()
-    item.user_name = payload.user.strip()
+    item.notes = payload.notes.strip()
+    item.user_name = assigned_user
     item.condition = payload.condition.strip()
     item.updated_at = datetime.now(timezone.utc)
     db.commit()

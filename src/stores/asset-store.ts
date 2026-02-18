@@ -4,6 +4,7 @@ import type { Asset, AssetStatus } from "@/types/asset";
 type AssetPayload = {
   assetTag: string;
   qrCode: string;
+  qrClass: "A" | "B" | "C";
   location: string;
   serialNumber: string;
   category: string;
@@ -13,6 +14,7 @@ type AssetPayload = {
   status: AssetStatus;
   user: string;
   condition: string;
+  notes: string;
 };
 
 export const assetStore = {

@@ -36,6 +36,7 @@ const DEPARTMENT_OPTIONS = [
   "Desarrollo",
   "Electricidad y Fuerza",
   "Administracion de Proyectos",
+  "Past Employee",
 ] as const;
 
 const EMPTY_DRAFT: PersonDraft = {

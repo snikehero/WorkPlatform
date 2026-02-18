@@ -13,6 +13,7 @@ export type Asset = {
   status: AssetStatus;
   user: string;
   condition: string;
+  notes: string;
   createdAt: string;
   updatedAt: string;
 };
