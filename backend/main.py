@@ -15,7 +15,7 @@ from jose import JWTError, jwt
 from openpyxl import load_workbook
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, create_engine, select, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, create_engine, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 
@@ -199,6 +199,37 @@ class Asset(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
+class Person(Base):
+    __tablename__ = "people"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, unique=True)
+    legacy_id: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True)
+    type: Mapped[str] = mapped_column(String(10), default="user")
+    role_id: Mapped[int] = mapped_column(Integer, default=2)
+    client_id: Mapped[int] = mapped_column(Integer, default=1)
+    name: Mapped[str] = mapped_column(String(128))
+    email: Mapped[str] = mapped_column(String(128), default="")
+    title: Mapped[str] = mapped_column(String(128), default="")
+    role: Mapped[str] = mapped_column(String(128), default="")
+    job_department: Mapped[str] = mapped_column(String(128), default="")
+    mobile: Mapped[str] = mapped_column(String(100), default="")
+    password_hash_legacy: Mapped[str] = mapped_column(String(128), default="")
+    theme: Mapped[str] = mapped_column(String(64), default="skin-blue")
+    sidebar: Mapped[str] = mapped_column(String(64), default="opened")
+    layout: Mapped[str] = mapped_column(String(64), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    signature: Mapped[str] = mapped_column(Text, default="")
+    session_id: Mapped[str] = mapped_column(String(255), default="")
+    reset_key: Mapped[str] = mapped_column(String(255), default="")
+    auto_refresh: Mapped[int] = mapped_column(Integer, default=0)
+    lang: Mapped[str] = mapped_column(String(5), default="en")
+    tickets_notification: Mapped[bool] = mapped_column(Boolean, default=False)
+    avatar_info: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -282,6 +313,32 @@ class AdminUpdateUserIn(BaseModel):
 
 class AdminResetPasswordIn(BaseModel):
     password: str = Field(min_length=6, max_length=128)
+
+
+class PersonIn(BaseModel):
+    name: str
+    email: str = ""
+    title: str = ""
+    role: UserRole = UserRole.user
+    department: str = ""
+    mobile: str = ""
+    notes: str = ""
+
+
+class PersonOut(BaseModel):
+    id: str
+    userId: str | None
+    userEmail: str | None
+    legacyId: int | None
+    name: str
+    email: str
+    title: str
+    role: str
+    department: str
+    mobile: str
+    notes: str
+    createdAt: str
+    updatedAt: str
 
 
 class ProjectIn(BaseModel):
@@ -550,6 +607,37 @@ def serialize_tags(items: list[str]) -> str:
     return ",".join(normalized)
 
 
+DEPARTMENT_OPTIONS: tuple[str, ...] = (
+    "Direccion",
+    "Administracion",
+    "Comercial",
+    "Capital Humano",
+    "Calidad",
+    "Compras",
+    "Automatizacion",
+    "Diseño Electrico",
+    "HMI",
+    "BMS",
+    "Mantenimiento",
+    "Construccion",
+    "Desarrollo",
+    "Electricidad y Fuerza",
+    "Administracion de Proyectos",
+)
+
+
+def normalize_department(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return DEPARTMENT_OPTIONS[0]
+    normalized = raw.casefold()
+    for option in DEPARTMENT_OPTIONS:
+        if option.casefold() == normalized:
+            return option
+    allowed = "|".join(DEPARTMENT_OPTIONS)
+    raise HTTPException(status_code=400, detail=f"department must be one of: {allowed}")
+
+
 def build_next_asset_tag(db: Session) -> str:
     tags = db.scalars(select(Asset.asset_tag)).all()
     highest = 0
@@ -744,6 +832,35 @@ def asset_to_out(asset: Asset) -> AssetOut:
     )
 
 
+def person_to_out(person: Person) -> PersonOut:
+    linked_user_email: str | None = None
+    if person.user_id:
+        with SessionLocal() as db:
+            linked_user = db.get(User, person.user_id)
+            linked_user_email = linked_user.email if linked_user else None
+    normalized_role = (person.role or "").strip().lower()
+    role_value = normalized_role if normalized_role in (UserRole.admin.value, UserRole.developer.value, UserRole.user.value) else UserRole.user.value
+    try:
+        department_value = normalize_department(person.job_department)
+    except HTTPException:
+        department_value = DEPARTMENT_OPTIONS[0]
+    return PersonOut(
+        id=person.id,
+        userId=person.user_id,
+        userEmail=linked_user_email,
+        legacyId=person.legacy_id,
+        name=person.name,
+        email=person.email,
+        title=person.title,
+        role=role_value,
+        department=department_value,
+        mobile=person.mobile,
+        notes=person.notes,
+        createdAt=to_iso(person.created_at),
+        updatedAt=to_iso(person.updated_at),
+    )
+
+
 app = FastAPI(title="WorkPlatform API")
 app.add_middleware(
     CORSMiddleware,
@@ -768,6 +885,31 @@ def on_startup():
         conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS supplier VARCHAR(120) DEFAULT ''"))
         conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS user_name VARCHAR(250) DEFAULT ''"))
         conn.execute(text("ALTER TABLE assets ADD COLUMN IF NOT EXISTS condition VARCHAR(120) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS legacy_id INTEGER"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS user_id VARCHAR(36)"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS type VARCHAR(10) DEFAULT 'user'"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS role_id INTEGER DEFAULT 2"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS client_id INTEGER DEFAULT 1"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS name VARCHAR(128) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS email VARCHAR(128) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS title VARCHAR(128) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS role VARCHAR(128) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS job_department VARCHAR(128) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS mobile VARCHAR(100) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS password_hash_legacy VARCHAR(128) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS theme VARCHAR(64) DEFAULT 'skin-blue'"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS sidebar VARCHAR(64) DEFAULT 'opened'"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS layout VARCHAR(64) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS signature TEXT DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS session_id VARCHAR(255) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS reset_key VARCHAR(255) DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS auto_refresh INTEGER DEFAULT 0"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS lang VARCHAR(5) DEFAULT 'en'"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS tickets_notification BOOLEAN DEFAULT FALSE"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS avatar_info TEXT DEFAULT ''"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()"))
+        conn.execute(text("ALTER TABLE people ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
     with SessionLocal() as db:
         existing = db.scalar(select(User).where(User.email == "admin@workplatform.local"))
         if not existing:
@@ -928,6 +1070,124 @@ def delete_user(user_id: str, current_admin: User = Depends(require_admin), db: 
     if user.id == current_admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
     db.delete(user)
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/admin/people", response_model=list[PersonOut])
+def list_people(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    items = db.scalars(select(Person).order_by(Person.name.asc())).all()
+    return [person_to_out(item) for item in items]
+
+
+def generate_placeholder_email(name: str, db: Session) -> str:
+    base = "".join(ch for ch in name.lower() if ch.isalnum())
+    if not base:
+        base = "user"
+    base = base[:24]
+    for _ in range(15):
+        candidate = f"{base}{uuid.uuid4().hex[:6]}@tdcon40.com"
+        exists = db.scalar(select(User).where(User.email == candidate))
+        if not exists:
+            return candidate
+    return f"user{uuid.uuid4().hex[:8]}@tdcon40.com"
+
+
+def resolve_person_user_email(raw_email: str, name: str, db: Session, exclude_user_id: str | None = None) -> str:
+    value = (raw_email or "").strip()
+    if not value:
+        return generate_placeholder_email(name, db)
+    normalized = normalize_login_identity(value)
+    query = select(User).where(User.email == normalized)
+    if exclude_user_id:
+        query = query.where(User.id != exclude_user_id)
+    existing = db.scalar(query)
+    if existing:
+        raise HTTPException(status_code=409, detail="User email already exists")
+    return normalized
+
+
+@app.post("/api/admin/people", response_model=PersonOut)
+def create_person(payload: PersonIn, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    department = normalize_department(payload.department)
+    item = Person(
+        type="user",
+        role_id=2,
+        client_id=1,
+        name=name,
+        email=payload.email.strip().lower(),
+        title=payload.title.strip(),
+        role=payload.role.value,
+        job_department=department,
+        mobile=payload.mobile.strip(),
+        notes=payload.notes.strip(),
+        lang="en",
+        tickets_notification=False,
+    )
+    db.add(item)
+    db.flush()
+    user_email = resolve_person_user_email(payload.email, name, db)
+    linked_user = User(
+        email=user_email,
+        password_hash=hash_password("12345"),
+        role=payload.role.value,
+        preferred_language=item.lang if item.lang in ("en", "es") else "en",
+    )
+    db.add(linked_user)
+    db.flush()
+    item.user_id = linked_user.id
+    db.commit()
+    db.refresh(item)
+    return person_to_out(item)
+
+
+@app.patch("/api/admin/people/{person_id}", response_model=PersonOut)
+def update_person(person_id: str, payload: PersonIn, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+    item = db.get(Person, person_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Person not found")
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    department = normalize_department(payload.department)
+    item.name = name
+    item.email = payload.email.strip().lower()
+    item.title = payload.title.strip()
+    item.role = payload.role.value
+    item.job_department = department
+    item.mobile = payload.mobile.strip()
+    item.notes = payload.notes.strip()
+    if item.user_id:
+        linked_user = db.get(User, item.user_id)
+        if linked_user:
+            linked_user.role = payload.role.value
+            if payload.email.strip():
+                linked_user.email = resolve_person_user_email(payload.email, name, db, exclude_user_id=linked_user.id)
+    else:
+        linked_user = User(
+            email=resolve_person_user_email(payload.email, name, db),
+            password_hash=hash_password("12345"),
+            role=payload.role.value,
+            preferred_language=item.lang if item.lang in ("en", "es") else "en",
+        )
+        db.add(linked_user)
+        db.flush()
+        item.user_id = linked_user.id
+    item.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(item)
+    return person_to_out(item)
+
+
+@app.delete("/api/admin/people/{person_id}")
+def delete_person(person_id: str, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+    item = db.get(Person, person_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Person not found")
+    db.delete(item)
     db.commit()
     return {"ok": True}
 

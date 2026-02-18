@@ -8,6 +8,7 @@ import { WeeklyReviewPage } from "@/pages/weekly-review-page";
 import { TeamCalendarPage } from "@/pages/team-calendar-page";
 import { AssetMaintenancePage } from "@/pages/asset-maintenance-page";
 import { AdminDashboardPage } from "@/pages/admin-dashboard-page";
+import { AdminUsersPage } from "@/pages/admin-users-page";
 import { TicketsPage } from "@/pages/tickets-page";
 import { TicketSolutionPage } from "@/pages/ticket-solution-page";
 import { AccountPage } from "@/pages/account-page";
@@ -16,6 +17,7 @@ import { NotificationsPage } from "@/pages/notifications-page";
 import { KnowledgeBasePage } from "@/pages/knowledge-base-page";
 import { AssetInventoryPage } from "@/pages/asset-inventory-page";
 import { AssetListPage } from "@/pages/asset-list-page";
+import { UserManagementPage } from "@/pages/user-management-page";
 import { useAuthStore } from "@/stores/auth-store";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -219,6 +221,26 @@ export const router = createBrowserRouter([
       <AdminRoute>
         <AppLayout>
           <AdminDashboardPage />
+        </AppLayout>
+      </AdminRoute>
+    ),
+  },
+  {
+    path: "/admin/user-management",
+    element: (
+      <AdminRoute>
+        <AppLayout>
+          <UserManagementPage />
+        </AppLayout>
+      </AdminRoute>
+    ),
+  },
+  {
+    path: "/admin/users",
+    element: (
+      <AdminRoute>
+        <AppLayout>
+          <AdminUsersPage />
         </AppLayout>
       </AdminRoute>
     ),

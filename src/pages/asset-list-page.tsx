@@ -1,18 +1,41 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { assetStore } from "@/stores/asset-store";
 import type { Asset } from "@/types/asset";
 import { useI18n } from "@/i18n/i18n";
+
+type SortKey =
+  | "assetTag"
+  | "qrCode"
+  | "location"
+  | "serialNumber"
+  | "category"
+  | "manufacturer"
+  | "model"
+  | "supplier"
+  | "status"
+  | "user"
+  | "condition";
 
 export const AssetListPage = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [search, setSearch] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [manufacturerFilter, setManufacturerFilter] = useState("");
+  const [supplierFilter, setSupplierFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [conditionFilter, setConditionFilter] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("assetTag");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const loadAssets = async () => {
     const data = await assetStore.all();
@@ -46,28 +69,101 @@ export const AssetListPage = () => {
     });
   };
 
-  const filteredAssets = useMemo(() => {
+  const locationOptions = useMemo(
+    () => Array.from(new Set(assets.map((item) => item.location).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [assets]
+  );
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(assets.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [assets]
+  );
+  const manufacturerOptions = useMemo(
+    () => Array.from(new Set(assets.map((item) => item.manufacturer).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [assets]
+  );
+  const supplierOptions = useMemo(
+    () => Array.from(new Set(assets.map((item) => item.supplier).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [assets]
+  );
+  const conditionOptions = useMemo(
+    () => Array.from(new Set(assets.map((item) => item.condition).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [assets]
+  );
+
+  const filteredAndSortedAssets = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return assets;
-    return assets.filter((item) =>
-      [
-        item.assetTag,
-        item.qrCode,
-        item.location,
-        item.serialNumber,
-        item.category,
-        item.manufacturer,
-        item.model,
-        item.supplier,
-        item.status,
-        item.user,
-        item.condition,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(term)
-    );
-  }, [assets, search]);
+    const filtered = assets.filter((item) => {
+      const matchesSearch = !term
+        ? true
+        : [
+            item.assetTag,
+            item.qrCode,
+            item.location,
+            item.serialNumber,
+            item.category,
+            item.manufacturer,
+            item.model,
+            item.supplier,
+            item.status,
+            item.user,
+            item.condition,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(term);
+
+      if (!matchesSearch) return false;
+      if (locationFilter && item.location !== locationFilter) return false;
+      if (categoryFilter && item.category !== categoryFilter) return false;
+      if (manufacturerFilter && item.manufacturer !== manufacturerFilter) return false;
+      if (supplierFilter && item.supplier !== supplierFilter) return false;
+      if (statusFilter && item.status !== statusFilter) return false;
+      if (conditionFilter && item.condition !== conditionFilter) return false;
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      const aValue = (a[sortKey] ?? "").toString().toLowerCase();
+      const bValue = (b[sortKey] ?? "").toString().toLowerCase();
+      const result = aValue.localeCompare(bValue, undefined, { numeric: true, sensitivity: "base" });
+      return sortDirection === "asc" ? result : -result;
+    });
+  }, [
+    assets,
+    search,
+    locationFilter,
+    categoryFilter,
+    manufacturerFilter,
+    supplierFilter,
+    statusFilter,
+    conditionFilter,
+    sortKey,
+    sortDirection,
+  ]);
+
+  const setSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  };
+
+  const renderSortIcon = (key: SortKey) => {
+    if (sortKey !== key) return <ArrowUpDown className="size-3 text-muted-foreground" />;
+    return sortDirection === "asc" ? <ArrowUpAZ className="size-3" /> : <ArrowDownAZ className="size-3" />;
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setLocationFilter("");
+    setCategoryFilter("");
+    setManufacturerFilter("");
+    setSupplierFilter("");
+    setStatusFilter("");
+    setConditionFilter("");
+  };
 
   return (
     <div className="space-y-6">
@@ -82,36 +178,130 @@ export const AssetListPage = () => {
           <CardDescription>{t("assets.inventorySubtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-3">
+          <div className="mb-3 grid gap-3 lg:grid-cols-4">
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder={t("assets.searchPlaceholder")}
             />
+            <Select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)}>
+              <option value="">{t("common.location")}</option>
+              {locationOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+            <Select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+              <option value="">{t("common.category")}</option>
+              {categoryOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+            <Select value={manufacturerFilter} onChange={(event) => setManufacturerFilter(event.target.value)}>
+              <option value="">{t("assets.manufacturer")}</option>
+              {manufacturerOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+            <Select value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
+              <option value="">{t("assets.supplier")}</option>
+              {supplierOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+            <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">{t("common.status")}</option>
+              <option value="active">{t("assets.status.active")}</option>
+              <option value="maintenance">{t("assets.status.maintenance")}</option>
+              <option value="retired">{t("assets.status.retired")}</option>
+              <option value="lost">{t("assets.status.lost")}</option>
+            </Select>
+            <Select value={conditionFilter} onChange={(event) => setConditionFilter(event.target.value)}>
+              <option value="">{t("assets.condition")}</option>
+              {conditionOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+            <Button type="button" variant="secondary" onClick={clearFilters}>
+              {t("common.clear")}
+            </Button>
           </div>
-          {filteredAssets.length === 0 ? (
+          {filteredAndSortedAssets.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("assets.empty")}</p>
           ) : (
             <div className="overflow-x-auto rounded-md border border-border">
               <table className="w-full min-w-[1200px] text-left text-sm">
                 <thead className="bg-muted/50 text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2">{t("assets.assetTag")}</th>
-                    <th className="px-3 py-2">{t("assets.qrCode")}</th>
-                    <th className="px-3 py-2">{t("common.location")}</th>
-                    <th className="px-3 py-2">{t("assets.serialNumber")}</th>
-                    <th className="px-3 py-2">{t("common.category")}</th>
-                    <th className="px-3 py-2">{t("assets.manufacturer")}</th>
-                    <th className="px-3 py-2">{t("assets.model")}</th>
-                    <th className="px-3 py-2">{t("assets.supplier")}</th>
-                    <th className="px-3 py-2">{t("common.status")}</th>
-                    <th className="px-3 py-2">{t("assets.user")}</th>
-                    <th className="px-3 py-2">{t("assets.condition")}</th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("assetTag")}>
+                        {t("assets.assetTag")} {renderSortIcon("assetTag")}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("qrCode")}>
+                        {t("assets.qrCode")} {renderSortIcon("qrCode")}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("location")}>
+                        {t("common.location")} {renderSortIcon("location")}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("serialNumber")}>
+                        {t("assets.serialNumber")} {renderSortIcon("serialNumber")}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("category")}>
+                        {t("common.category")} {renderSortIcon("category")}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("manufacturer")}>
+                        {t("assets.manufacturer")} {renderSortIcon("manufacturer")}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("model")}>
+                        {t("assets.model")} {renderSortIcon("model")}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("supplier")}>
+                        {t("assets.supplier")} {renderSortIcon("supplier")}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("status")}>
+                        {t("common.status")} {renderSortIcon("status")}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("user")}>
+                        {t("assets.user")} {renderSortIcon("user")}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">
+                      <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("condition")}>
+                        {t("assets.condition")} {renderSortIcon("condition")}
+                      </button>
+                    </th>
                     <th className="px-3 py-2">{t("common.view")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAssets.map((item) => (
+                  {filteredAndSortedAssets.map((item) => (
                     <tr key={item.id} className="border-t border-border align-top">
                       <td className="px-3 py-2">{item.assetTag}</td>
                       <td className="px-3 py-2">{item.qrCode || "-"}</td>
