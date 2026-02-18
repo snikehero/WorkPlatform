@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import React from "react";
-import { CheckSquare, ChevronDown, ChevronRight, LogOut, Menu, Moon, Sun } from "lucide-react";
+import { CheckSquare, ChevronDown, ChevronRight, LogOut, Menu, Moon, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,14 +12,12 @@ const SECTION_OPEN_KEY = "workplatform-sidebar-sections";
 
 type SectionState = {
   personal: boolean;
-  dashboards: boolean;
   work: boolean;
   assets: boolean;
 };
 
 const DEFAULT_SECTION_STATE: SectionState = {
   personal: true,
-  dashboards: true,
   work: true,
   assets: true,
 };
@@ -42,7 +40,6 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
       const parsed = JSON.parse(raw) as Partial<SectionState>;
       return {
         personal: parsed.personal ?? true,
-        dashboards: parsed.dashboards ?? true,
         work: parsed.work ?? true,
         assets: parsed.assets ?? true,
       };
@@ -61,6 +58,10 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
     navigate("/login");
   };
 
+  const handleAccount = () => {
+    navigate("/account");
+  };
+
   React.useEffect(() => {
     localStorage.setItem(SIDEBAR_OPEN_KEY, isSidebarOpen ? "1" : "0");
   }, [isSidebarOpen]);
@@ -69,11 +70,11 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(SECTION_OPEN_KEY, JSON.stringify(sectionOpen));
   }, [sectionOpen]);
 
-  const toggleSection = (section: "personal" | "dashboards" | "work" | "assets") => {
+  const toggleSection = (section: "personal" | "work" | "assets") => {
     setSectionOpen((current) => ({ ...current, [section]: !current[section] }));
   };
 
-  const renderSectionHeader = (section: "personal" | "dashboards" | "work" | "assets", label: string) => {
+  const renderSectionHeader = (section: "personal" | "work" | "assets", label: string) => {
     if (!isSidebarOpen) return null;
     return (
       <button
@@ -159,26 +160,6 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     {t("nav.projects")}
                   </NavLink>
                   <NavLink
-                    to="/account"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.account")}
-                  </NavLink>
-                </nav>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              {renderSectionHeader("dashboards", t("nav.dashboards"))}
-              {(!isSidebarOpen || sectionOpen.dashboards) ? (
-                <nav className="space-y-1">
-                  <NavLink
                     to="/weekly"
                     className={({ isActive }) =>
                       `block rounded-md px-2 py-2 text-sm ${
@@ -191,20 +172,18 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     {t("nav.weekly")}
                   </NavLink>
                   {(userRole === "admin" || userRole === "developer") ? (
-                    <>
-                      <NavLink
-                        to="/team-calendar"
-                        className={({ isActive }) =>
-                          `block rounded-md px-2 py-2 text-sm ${
-                            isActive
-                              ? "bg-muted text-foreground"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`
-                        }
-                      >
-                        {t("nav.calendar")}
-                      </NavLink>
-                    </>
+                    <NavLink
+                      to="/team-calendar"
+                      className={({ isActive }) =>
+                        `block rounded-md px-2 py-2 text-sm ${
+                          isActive
+                            ? "bg-muted text-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`
+                      }
+                    >
+                      {t("nav.calendar")}
+                    </NavLink>
                   ) : null}
                 </nav>
               ) : null}
@@ -335,6 +314,10 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                 <span className="text-sm text-muted-foreground">{userEmail}</span>
               </div>
               <div className="flex items-center gap-3">
+                <Button variant="ghost" size="sm" onClick={handleAccount}>
+                  <User className="mr-1 size-4" />
+                  {t("nav.account")}
+                </Button>
                 <Button variant="ghost" size="sm" onClick={toggleTheme}>
                   {resolvedTheme === "dark" ? (
                     <Sun className="mr-1 size-4" />

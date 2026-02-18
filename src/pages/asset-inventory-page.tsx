@@ -40,6 +40,15 @@ const CATEGORY_OPTIONS = [
   "Monitor",
   "HDD",
   "WebCam",
+  "NAS",
+  "Plotter",
+  "Otro",
+];
+
+const SUPPLIER_OPTIONS = [
+  "TDC-COMPRAS",
+  "TDC-ADMINISTRACION",
+  "TDC-ALMACEN",
 ];
 
 const getNextAssetTag = (items: Asset[]) => {
@@ -76,6 +85,28 @@ export const AssetInventoryPage = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [draft, setDraft] = useState<AssetDraft>(EMPTY_DRAFT);
   const nextAssetTag = useMemo(() => getNextAssetTag(assets), [assets]);
+  const manufacturerOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          assets
+            .map((item) => item.manufacturer.trim().toLocaleUpperCase("es-MX"))
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [assets]
+  );
+  const modelOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          assets
+            .map((item) => item.model.trim().toLocaleUpperCase("es-MX"))
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [assets]
+  );
 
   const loadAssets = async () => {
     const data = await assetStore.all();
@@ -236,25 +267,50 @@ export const AssetInventoryPage = () => {
                 <Label htmlFor="asset-manufacturer">{t("assets.manufacturer")}</Label>
                 <Input
                   id="asset-manufacturer"
+                  list="asset-manufacturer-options"
                   value={draft.manufacturer}
-                  onChange={(event) => setDraft((current) => ({ ...current, manufacturer: event.target.value }))}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, manufacturer: event.target.value.toLocaleUpperCase("es-MX") }))
+                  }
                 />
+                <datalist id="asset-manufacturer-options">
+                  {manufacturerOptions.map((value) => (
+                    <option key={value} value={value} />
+                  ))}
+                </datalist>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="asset-model">{t("assets.model")}</Label>
                 <Input
                   id="asset-model"
+                  list="asset-model-options"
                   value={draft.model}
-                  onChange={(event) => setDraft((current) => ({ ...current, model: event.target.value }))}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, model: event.target.value.toLocaleUpperCase("es-MX") }))
+                  }
                 />
+                <datalist id="asset-model-options">
+                  {modelOptions.map((value) => (
+                    <option key={value} value={value} />
+                  ))}
+                </datalist>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="asset-supplier">{t("assets.supplier")}</Label>
-                <Input
+                <Select
                   id="asset-supplier"
                   value={draft.supplier}
-                  onChange={(event) => setDraft((current) => ({ ...current, supplier: event.target.value }))}
-                />
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, supplier: event.target.value.toLocaleUpperCase("es-MX") }))
+                  }
+                >
+                  <option value=""></option>
+                  {SUPPLIER_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="asset-user">{t("assets.user")}</Label>
