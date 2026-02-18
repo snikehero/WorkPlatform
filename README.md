@@ -2,11 +2,11 @@
 
 WorkPlatform is a full-stack internal operations platform built with React + FastAPI + PostgreSQL.
 
-It includes modules for:
+Main modules:
 - Authentication and role-based access (`admin`, `developer`, `user`)
-- Tickets and ticket workflow
-- Assets and asset lifecycle history
-- Asset maintenance (dashboard, registry, create)
+- Tickets workflow
+- Assets + asset lifecycle history
+- Maintenance (Dashboard, Registry, Create)
 - Projects, daily tasks, daily notes
 - Knowledge base, notifications, team calendar
 
@@ -14,7 +14,7 @@ It includes modules for:
 
 Frontend:
 - React + TypeScript + Vite
-- TailwindCSS + custom UI components
+- TailwindCSS
 
 Backend:
 - FastAPI
@@ -26,16 +26,34 @@ Backend:
 
 ```text
 .
-+- src/                # Frontend app
-+- backend/            # FastAPI backend
-+- docker-compose.yml  # Full local stack (frontend + backend + postgres)
-+- Dockerfile          # Frontend container image
-+- backend/Dockerfile  # Backend container image
+|- src/                # Frontend app
+|- backend/            # FastAPI backend
+|- .github/workflows/  # CI/CD workflows
+|- docker-compose.yml  # Local full stack (frontend + backend + postgres)
+|- Dockerfile          # Frontend image (nginx static)
+`- backend/Dockerfile  # Backend image
+```
+
+## Architecture Diagram
+
+```mermaid
+flowchart LR
+  U[User Browser] -->|HTTP| FE[Frontend\nReact + Vite Build\nServed by Nginx]
+  FE -->|REST API| BE[Backend API\nFastAPI + SQLAlchemy]
+  BE -->|SQL| DB[(PostgreSQL)]
+
+  FE -->|Auth Token| FE
+  BE -->|JWT Validate| BE
+
+  subgraph Maintenance
+    FE -->|Upload template + payload| BE
+    BE -->|Generate Excel| FE
+  end
 ```
 
 ## Quick Start (Docker)
 
-From project root:
+From repo root:
 
 ```bash
 docker compose up --build
@@ -48,7 +66,7 @@ Services:
 
 ## Local Development (without Docker)
 
-### 1) Backend
+### Backend
 
 ```bash
 cd backend
@@ -57,7 +75,6 @@ python -m venv .venv
 .venv\Scripts\activate
 # macOS/Linux
 # source .venv/bin/activate
-
 pip install -r requirements.txt
 ```
 
@@ -69,136 +86,86 @@ JWT_SECRET=change-me
 JWT_EXP_MINUTES=720
 ```
 
-Run backend:
+Run:
 
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 2) Frontend
+### Frontend
 
 ```bash
 npm install
 npm run dev
 ```
 
-Frontend dev server is configured for LAN access (`host: true`).
-
 ## Environment Variables
 
 Backend:
-- `DATABASE_URL` (required in real deployments)
-- `JWT_SECRET` (required in real deployments)
+- `DATABASE_URL`
+- `JWT_SECRET`
 - `JWT_EXP_MINUTES` (optional, default `720`)
 
-Frontend (build-time Vite vars):
+Frontend (Vite build-time):
 - `VITE_API_BASE`
 - `VITE_MAINTENANCE_EXPORT_API`
 
 Notes:
-- If `VITE_API_BASE` is not set, frontend resolves API base dynamically as `http(s)://<current-host>:8000`.
-- If `VITE_MAINTENANCE_EXPORT_API` is not set, it resolves dynamically as `http(s)://<current-host>:8000/api/maintenance/export`.
+- If `VITE_API_BASE` is not set, frontend resolves dynamically to `http(s)://<current-host>:8000`.
+- If `VITE_MAINTENANCE_EXPORT_API` is not set, frontend resolves dynamically to `http(s)://<current-host>:8000/api/maintenance/export`.
 
 ## Default Seed User
 
-On first backend startup, the app seeds:
+On first backend startup:
 - Email: `admin@workplatform.local`
 - Password: `123456`
 
-Change this immediately in non-local environments.
+Change this for non-local environments.
 
-## Deployment Guide
-
-## Option A: Render.com (recommended)
-
-Use 3 services:
-1. PostgreSQL (Render managed Postgres)
-2. Backend (Web Service)
-3. Frontend (Static Site)
-
-### Backend Service (Render Web Service)
-
-Root directory: `backend`
-
-Build command:
-```bash
-pip install -r requirements.txt
-```
-
-Start command:
-```bash
-uvicorn main:app --host 0.0.0.0 --port $PORT
-```
-
-Required env vars:
-- `DATABASE_URL` = Render Postgres internal/external URL (use external format supported by `psycopg`)
-- `JWT_SECRET` = strong secret
-- `JWT_EXP_MINUTES` = optional (e.g. `720`)
-
-### Frontend Service (Render Static Site)
-
-Root directory: repository root
-
-Build command:
-```bash
-npm ci && npm run build
-```
-
-Publish directory:
-```bash
-dist
-```
-
-Required env vars (build-time):
-- `VITE_API_BASE=https://<your-backend-service>.onrender.com`
-- `VITE_MAINTENANCE_EXPORT_API=https://<your-backend-service>.onrender.com/api/maintenance/export`
-
-Important:
-- Do not rely on Render IP addresses.
-- Use the Render service URL (or custom domain) for backend references.
-
-## Option B: Docker on VM / Local Server
+## Deployment (Docker / VM / LAN)
 
 ```bash
 docker compose up -d --build
 ```
 
-Open ports:
-- `8080` (frontend)
-- `8000` (backend)
-- `5432` (postgres, optional to expose publicly)
+Ports:
+- `8080` frontend
+- `8000` backend
+- `5432` postgres
 
-For LAN access, use your host IP:
+LAN access example:
 - `http://<host-ip>:8080`
 
-## API and CORS
+## CI/CD (Current State)
 
-Backend currently allows all origins (`allow_origins=["*"]`) for simplicity.
-For production hardening, restrict this to known frontend domains.
+Current workflow file:
+- `.github/workflows/docker-publish.yml`
 
-## Current Maintenance Module Pages
+What it does today:
+1. Triggers on push to `main`.
+2. Checks out repo.
+3. Sets up Docker Buildx.
+4. Logs into Docker Hub using secrets:
+   - `DOCKERHUB_USERNAME`
+   - `DOCKERHUB_TOKEN`
+5. Builds and pushes image:
+   - `snikehero/workplatform:latest`
 
-- `Maintenance Dashboard`: next/upcoming due maintenance
-- `Maintenance Registry`: all maintenance records + Excel export
-- `Create Maintenance`: maintenance form entry
-
-Routes:
-- `/maintenance/dashboard`
-- `/maintenance/registry`
-- `/maintenance/create`
+Important current limitations:
+- No automated tests in CI before push.
+- No backend image push step (current workflow builds from repo root Dockerfile).
+- Single `latest` tag strategy (no versioned tags).
 
 ## Useful Commands
 
 Type check frontend:
+
 ```bash
 npx tsc --noEmit
 ```
 
 Run full stack:
+
 ```bash
 docker compose up --build
 ```
-
-## License
-
-Internal project. Add your organization's license policy if required.
