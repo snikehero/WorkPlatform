@@ -1775,6 +1775,19 @@ def list_my_ticket_events(ticket_id: str, current_user: User = Depends(get_curre
     return [ticket_event_to_out(item, db) for item in events]
 
 
+@app.delete("/api/tickets/mine/{ticket_id}")
+def delete_my_ticket(ticket_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ticket = db.scalar(select(Ticket).where(Ticket.id == ticket_id, Ticket.requester_id == current_user.id))
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    events = db.scalars(select(TicketEvent).where(TicketEvent.ticket_id == ticket_id)).all()
+    for event in events:
+        db.delete(event)
+    db.delete(ticket)
+    db.commit()
+    return {"ok": True}
+
+
 @app.post("/api/tickets", response_model=TicketOut)
 def create_ticket(payload: TicketIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     category = normalize_ticket_category(payload.category)

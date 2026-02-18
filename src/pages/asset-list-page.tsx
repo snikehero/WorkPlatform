@@ -23,6 +23,32 @@ type SortKey =
   | "user"
   | "condition";
 
+const CATEGORY_BADGE_CLASSES: Record<string, string> = {
+  "dd externo": "border-amber-300/40 bg-amber-400/10 text-amber-700 dark:text-amber-300",
+  desktop: "border-indigo-300/40 bg-indigo-400/10 text-indigo-700 dark:text-indigo-300",
+  impresora: "border-orange-300/40 bg-orange-400/10 text-orange-700 dark:text-orange-300",
+  laptop: "border-cyan-300/40 bg-cyan-400/10 text-cyan-700 dark:text-cyan-300",
+  monitor: "border-violet-300/40 bg-violet-400/10 text-violet-700 dark:text-violet-300",
+  mouse: "border-lime-300/40 bg-lime-400/10 text-lime-700 dark:text-lime-300",
+  nas: "border-fuchsia-300/40 bg-fuchsia-400/10 text-fuchsia-700 dark:text-fuchsia-300",
+  otro: "border-slate-300/40 bg-slate-400/10 text-slate-700 dark:text-slate-300",
+  plotter: "border-pink-300/40 bg-pink-400/10 text-pink-700 dark:text-pink-300",
+  printer: "border-orange-300/40 bg-orange-400/10 text-orange-700 dark:text-orange-300",
+  server: "border-rose-300/40 bg-rose-400/10 text-rose-700 dark:text-rose-300",
+  servidor: "border-rose-300/40 bg-rose-400/10 text-rose-700 dark:text-rose-300",
+  tablet: "border-teal-300/40 bg-teal-400/10 text-teal-700 dark:text-teal-300",
+  teclado: "border-emerald-300/40 bg-emerald-400/10 text-emerald-700 dark:text-emerald-300",
+  webcam: "border-sky-300/40 bg-sky-400/10 text-sky-700 dark:text-sky-300",
+  phone: "border-lime-300/40 bg-lime-400/10 text-lime-700 dark:text-lime-300",
+  "network equipment": "border-fuchsia-300/40 bg-fuchsia-400/10 text-fuchsia-700 dark:text-fuchsia-300",
+  accessory: "border-slate-300/40 bg-slate-400/10 text-slate-700 dark:text-slate-300",
+};
+
+const getCategoryBadgeClass = (category: string) => {
+  const normalized = category.trim().toLowerCase();
+  return CATEGORY_BADGE_CLASSES[normalized] ?? "border-border bg-muted/40 text-foreground";
+};
+
 export const AssetListPage = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -89,7 +115,6 @@ export const AssetListPage = () => {
     () => Array.from(new Set(assets.map((item) => item.condition).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [assets]
   );
-
   const filteredAndSortedAssets = useMemo(() => {
     const term = search.trim().toLowerCase();
     const filtered = assets.filter((item) => {
@@ -307,7 +332,15 @@ export const AssetListPage = () => {
                       <td className="px-3 py-2">{item.qrCode || "-"}</td>
                       <td className="px-3 py-2">{item.location || "-"}</td>
                       <td className="px-3 py-2">{item.serialNumber || "-"}</td>
-                      <td className="px-3 py-2">{item.category || "-"}</td>
+                      <td className="px-3 py-2">
+                        {item.category ? (
+                          <Badge variant="neutral" className={getCategoryBadgeClass(item.category)}>
+                            {item.category}
+                          </Badge>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
                       <td className="px-3 py-2">{item.manufacturer || "-"}</td>
                       <td className="px-3 py-2">{item.model || "-"}</td>
                       <td className="px-3 py-2">{item.supplier || "-"}</td>

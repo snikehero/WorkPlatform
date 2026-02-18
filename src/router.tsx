@@ -20,6 +20,7 @@ import { NotificationsPage } from "@/pages/notifications-page";
 import { KnowledgeBasePage } from "@/pages/knowledge-base-page";
 import { AssetInventoryPage } from "@/pages/asset-inventory-page";
 import { AssetListPage } from "@/pages/asset-list-page";
+import { AssetDashboardPage } from "@/pages/asset-dashboard-page";
 import { UserManagementPage } from "@/pages/user-management-page";
 import { PeopleDirectoryPage } from "@/pages/people-directory-page";
 import { useAuthStore } from "@/stores/auth-store";
@@ -232,7 +233,17 @@ export const router = createBrowserRouter([
     path: "/assets",
     element: (
       <TeamRoute>
-        <Navigate to="/assets/register" replace />
+        <Navigate to="/assets/dashboard" replace />
+      </TeamRoute>
+    ),
+  },
+  {
+    path: "/assets/dashboard",
+    element: (
+      <TeamRoute>
+        <AppLayout>
+          <AssetDashboardPage />
+        </AppLayout>
       </TeamRoute>
     ),
   },

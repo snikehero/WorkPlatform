@@ -5,6 +5,10 @@ export const ticketStore = {
   mine: () => apiRequest<Ticket[]>("/api/tickets/mine"),
   mineById: (ticketId: string) => apiRequest<Ticket>(`/api/tickets/mine/${ticketId}`),
   mineEvents: (ticketId: string) => apiRequest<TicketEvent[]>(`/api/tickets/mine/${ticketId}/events`),
+  deleteMine: (ticketId: string) =>
+    apiRequest<{ ok: boolean }>(`/api/tickets/mine/${ticketId}`, {
+      method: "DELETE",
+    }),
   openUnassigned: () => apiRequest<Ticket[]>("/api/tickets/open-unassigned"),
   assignedMine: () => apiRequest<Ticket[]>("/api/tickets/assigned-mine"),
   assignableUsers: () => apiRequest<TicketAssignee[]>("/api/tickets/assignable-users"),

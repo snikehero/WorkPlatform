@@ -20,6 +20,7 @@ export const TicketsUserDetailPage = () => {
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [events, setEvents] = useState<TicketEvent[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!ticketId) return;
@@ -50,6 +51,21 @@ export const TicketsUserDetailPage = () => {
     );
   }
 
+  const handleDelete = async () => {
+    const shouldDelete = window.confirm(t("tickets.deleteConfirm"));
+    if (!shouldDelete) return;
+    setIsDeleting(true);
+    setMessage(null);
+    try {
+      await ticketStore.deleteMine(ticket.id);
+      navigate("/tickets/my");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t("tickets.deleteFailed"));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -57,9 +73,14 @@ export const TicketsUserDetailPage = () => {
           <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("tickets.userDetailTitle")}</h1>
           <p className="text-sm text-muted-foreground">{t("tickets.userDetailSubtitle")}</p>
         </div>
-        <Button variant="secondary" onClick={() => navigate("/tickets/my")}>
-          {t("tickets.backToList")}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => navigate("/tickets/my")}>
+            {t("tickets.backToList")}
+          </Button>
+          <Button variant="destructive" disabled={isDeleting} onClick={handleDelete}>
+            {t("tickets.delete")}
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -136,6 +157,7 @@ export const TicketsUserDetailPage = () => {
           </ul>
         </CardContent>
       </Card>
+      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
     </div>
   );
 };

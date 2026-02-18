@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { ticketStore } from "@/stores/ticket-store";
 import type { Ticket } from "@/types/ticket";
 import { useI18n } from "@/i18n/i18n";
@@ -14,6 +15,9 @@ export const TicketsMyPage = () => {
   const role = useAuthStore.getState().role;
   const isTeamUser = role === "admin" || role === "developer";
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [developerFilter, setDeveloperFilter] = useState<"assigned" | "closed">("assigned");
+  const [userFilter, setUserFilter] = useState<"active" | "closed">("active");
+  const [message, setMessage] = useState<string | null>(null);
 
   const loadTickets = async () => {
     const data = isTeamUser ? await ticketStore.assignedMine() : await ticketStore.mine();
@@ -24,7 +28,32 @@ export const TicketsMyPage = () => {
     loadTickets().catch(() => setTickets([]));
   }, [isTeamUser]);
 
-  const openCount = useMemo(() => tickets.filter((item) => !["resolved", "closed"].includes(item.status)).length, [tickets]);
+  const filteredTickets = useMemo(() => {
+    if (!isTeamUser) return tickets;
+    if (developerFilter === "closed") return tickets.filter((item) => item.status === "closed");
+    return tickets.filter((item) => item.status !== "closed");
+  }, [developerFilter, isTeamUser, tickets]);
+
+  const visibleTickets = useMemo(() => {
+    if (isTeamUser) return filteredTickets;
+    if (userFilter === "closed") return tickets.filter((item) => item.status === "closed");
+    return tickets.filter((item) => item.status !== "closed");
+  }, [filteredTickets, isTeamUser, tickets, userFilter]);
+
+  const openCount = useMemo(() => visibleTickets.filter((item) => !["resolved", "closed"].includes(item.status)).length, [visibleTickets]);
+
+  const handleDeleteMine = async (ticketId: string) => {
+    const shouldDelete = window.confirm(t("tickets.deleteConfirm"));
+    if (!shouldDelete) return;
+    setMessage(null);
+    try {
+      await ticketStore.deleteMine(ticketId);
+      await loadTickets();
+      setMessage(t("tickets.deleted"));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t("tickets.deleteFailed"));
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -36,14 +65,29 @@ export const TicketsMyPage = () => {
       <Card>
         <CardHeader>
           <CardTitle>{t("tickets.myTitle")}</CardTitle>
-          <CardDescription>{t("tickets.myCounts", { open: openCount, total: tickets.length })}</CardDescription>
+          <CardDescription>{t("tickets.myCounts", { open: openCount, total: visibleTickets.length })}</CardDescription>
         </CardHeader>
         <CardContent>
-          {tickets.length === 0 ? (
+          {isTeamUser ? (
+            <div className="mb-4 max-w-52">
+              <Select value={developerFilter} onChange={(event) => setDeveloperFilter(event.target.value as "assigned" | "closed")}>
+                <option value="assigned">{t("tickets.filterAssigned")}</option>
+                <option value="closed">{t("tickets.filterClosed")}</option>
+              </Select>
+            </div>
+          ) : (
+            <div className="mb-4 max-w-52">
+              <Select value={userFilter} onChange={(event) => setUserFilter(event.target.value as "active" | "closed")}>
+                <option value="active">{t("tickets.filterActive")}</option>
+                <option value="closed">{t("tickets.filterClosed")}</option>
+              </Select>
+            </div>
+          )}
+          {visibleTickets.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("tickets.myEmpty")}</p>
           ) : (
             <ul className="space-y-2">
-              {tickets.map((ticket) => (
+              {visibleTickets.map((ticket) => (
                 <li key={ticket.id} className="rounded-md border border-border bg-card p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium text-foreground">{ticket.title}</p>
@@ -66,18 +110,26 @@ export const TicketsMyPage = () => {
                     </>
                   ) : null}
                   <div className="mt-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => navigate(isTeamUser ? `/tickets/${ticket.id}` : `/tickets/my/${ticket.id}`)}
-                    >
-                      {isTeamUser ? t("tickets.openSolution") : t("tickets.viewDetails")}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => navigate(isTeamUser ? `/tickets/${ticket.id}` : `/tickets/my/${ticket.id}`)}
+                      >
+                        {isTeamUser ? t("tickets.openSolution") : t("tickets.viewDetails")}
+                      </Button>
+                      {!isTeamUser ? (
+                        <Button size="sm" variant="destructive" onClick={() => handleDeleteMine(ticket.id)}>
+                          {t("tickets.delete")}
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 </li>
               ))}
             </ul>
           )}
+          {message ? <p className="mt-3 text-sm text-muted-foreground">{message}</p> : null}
         </CardContent>
       </Card>
     </div>
