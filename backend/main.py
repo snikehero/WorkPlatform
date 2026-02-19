@@ -3,9 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 
 try:
-    from .core import Base, SessionLocal, User, UserRole, engine, hash_password
+    from .core import Base, DEFAULT_ROLE_MODULE_ACCESS, MODULE_NAMES, RoleModuleAccess, SessionLocal, User, UserRole, engine, hash_password
 except ImportError:
-    from core import Base, SessionLocal, User, UserRole, engine, hash_password
+    from core import Base, DEFAULT_ROLE_MODULE_ACCESS, MODULE_NAMES, RoleModuleAccess, SessionLocal, User, UserRole, engine, hash_password
 
 
 app = FastAPI(title="WorkPlatform API")
@@ -77,7 +77,25 @@ def on_startup():
                 preferred_language="en",
             )
             db.add(admin)
-            db.commit()
+            db.flush()
+        for role_name, modules in DEFAULT_ROLE_MODULE_ACCESS.items():
+            for module_name in MODULE_NAMES:
+                existing_rule = db.scalar(
+                    select(RoleModuleAccess).where(
+                        RoleModuleAccess.role == role_name,
+                        RoleModuleAccess.module == module_name,
+                    )
+                )
+                if existing_rule:
+                    continue
+                db.add(
+                    RoleModuleAccess(
+                        role=role_name,
+                        module=module_name,
+                        enabled=bool(modules.get(module_name, True)),
+                    )
+                )
+        db.commit()
 
 
 try:

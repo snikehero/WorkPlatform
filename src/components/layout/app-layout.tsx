@@ -6,6 +6,7 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/auth-store";
 import { useI18n } from "@/i18n/i18n";
+import { moduleAccessStore } from "@/stores/module-access-store";
 
 const SIDEBAR_OPEN_KEY = "workplatform-sidebar-open";
 const SECTION_OPEN_KEY = "workplatform-sidebar-sections";
@@ -29,6 +30,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   const authState = useAuthStore.getState();
   const userEmail = authState.userEmail;
   const userRole = authState.role;
+  const [moduleAccess, setModuleAccess] = React.useState(moduleAccessStore.getState().modules);
   const { t } = useI18n();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(() => {
@@ -73,6 +75,12 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(SECTION_OPEN_KEY, JSON.stringify(sectionOpen));
   }, [sectionOpen]);
 
+  React.useEffect(() => {
+    const unsubscribe = moduleAccessStore.subscribe((next) => setModuleAccess(next.modules));
+    moduleAccessStore.refreshMine().catch(() => null);
+    return unsubscribe;
+  }, []);
+
   const toggleSection = (section: "personal" | "work" | "tickets" | "assets") => {
     setSectionOpen((current) => ({ ...current, [section]: !current[section] }));
   };
@@ -90,6 +98,12 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
       </button>
     );
   };
+
+  const canAccessPersonal = moduleAccess.personal;
+  const canAccessWork = moduleAccess.work;
+  const canAccessTickets = moduleAccess.tickets;
+  const canAccessAssets = moduleAccess.assets && (userRole === "admin" || userRole === "developer");
+  const canAccessAdmin = moduleAccess.admin && userRole === "admin";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -115,9 +129,10 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
           </div>
 
           <div className="space-y-4 px-3 pb-6">
-            <div className="space-y-2">
-              {renderSectionHeader("personal", t("nav.personal"))}
-              {(!isSidebarOpen || sectionOpen.personal) ? (
+            {canAccessPersonal ? (
+              <div className="space-y-2">
+                {renderSectionHeader("personal", t("nav.personal"))}
+                {(!isSidebarOpen || sectionOpen.personal) ? (
                 <nav className="space-y-1">
                   <NavLink
                     to="/dashboard"
@@ -194,12 +209,14 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     </NavLink>
                   ) : null}
                 </nav>
-              ) : null}
-            </div>
+                ) : null}
+              </div>
+            ) : null}
 
-            <div className="space-y-2">
-              {renderSectionHeader("work", t("nav.work"))}
-              {(!isSidebarOpen || sectionOpen.work) ? (
+            {canAccessWork ? (
+              <div className="space-y-2">
+                {renderSectionHeader("work", t("nav.work"))}
+                {(!isSidebarOpen || sectionOpen.work) ? (
                 <nav className="space-y-1">
                   {(userRole === "admin" || userRole === "developer") ? (
                     <>
@@ -268,11 +285,13 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     </NavLink>
                   ) : null}
                 </nav>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              {renderSectionHeader("tickets", t("nav.ticketsSection"))}
-              {(!isSidebarOpen || sectionOpen.tickets) ? (
+                ) : null}
+              </div>
+            ) : null}
+            {canAccessTickets ? (
+              <div className="space-y-2">
+                {renderSectionHeader("tickets", t("nav.ticketsSection"))}
+                {(!isSidebarOpen || sectionOpen.tickets) ? (
                 <nav className="space-y-1">
                   <NavLink
                     to="/tickets/create"
@@ -315,9 +334,10 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     {t("nav.ticketsMy")}
                   </NavLink>
                 </nav>
-              ) : null}
-            </div>
-            {(userRole === "admin" || userRole === "developer") ? (
+                ) : null}
+              </div>
+            ) : null}
+            {canAccessAssets ? (
               <div className="space-y-2">
                 {renderSectionHeader("assets", t("nav.assetsSection"))}
                 {(!isSidebarOpen || sectionOpen.assets) ? (
@@ -362,7 +382,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                 ) : null}
               </div>
             ) : null}
-            {userRole === "admin" ? (
+            {canAccessAdmin ? (
               <div className="space-y-2">
                 {isSidebarOpen ? (
                   <p className="text-xs uppercase tracking-wide text-muted-foreground/70">{t("nav.admin")}</p>
@@ -415,6 +435,18 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                     }
                   >
                     {t("nav.adminUsers")}
+                  </NavLink>
+                  <NavLink
+                    to="/admin/module-access"
+                    className={({ isActive }) =>
+                      `block rounded-md px-2 py-2 text-sm ${
+                        isActive
+                          ? "bg-muted text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`
+                    }
+                  >
+                    {t("nav.moduleAccess")}
                   </NavLink>
                 </nav>
               </div>

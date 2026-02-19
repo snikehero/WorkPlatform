@@ -26,36 +26,50 @@ import { AssetDashboardPage } from "@/pages/asset-dashboard-page";
 import { UserManagementPage } from "@/pages/user-management-page";
 import { PeopleDirectoryPage } from "@/pages/people-directory-page";
 import { useAuthStore } from "@/stores/auth-store";
+import { moduleAccessStore } from "@/stores/module-access-store";
+import { getDefaultLandingPath } from "@/lib/module-access";
+import type { AppModule } from "@/types/module-access";
+import { AdminModuleAccessPage } from "@/pages/admin-module-access-page";
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+const getLandingPath = () => {
+  const auth = useAuthStore.getState();
+  return getDefaultLandingPath(auth.role, moduleAccessStore.getState().modules);
+};
+
+const ProtectedRoute = ({ children, module }: { children: React.ReactNode; module?: AppModule }) => {
   const isAuthenticated = useAuthStore.getState().isAuthenticated;
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (module && !moduleAccessStore.canAccess(module)) return <Navigate to={getLandingPath()} replace />;
+  return children;
 };
 
 const PublicOnlyRoute = ({ children }: { children: React.ReactNode }) => {
   const isAuthenticated = useAuthStore.getState().isAuthenticated;
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
+  return isAuthenticated ? <Navigate to={getLandingPath()} replace /> : children;
 };
 
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const auth = useAuthStore.getState();
   if (!auth.isAuthenticated) return <Navigate to="/login" replace />;
-  return auth.role === "admin" ? children : <Navigate to="/dashboard" replace />;
+  if (auth.role !== "admin") return <Navigate to={getLandingPath()} replace />;
+  return moduleAccessStore.canAccess("admin") ? children : <Navigate to={getLandingPath()} replace />;
 };
 
-const TeamRoute = ({ children }: { children: React.ReactNode }) => {
+const TeamRoute = ({ children, module }: { children: React.ReactNode; module: AppModule }) => {
   const auth = useAuthStore.getState();
   if (!auth.isAuthenticated) return <Navigate to="/login" replace />;
+  if (!moduleAccessStore.canAccess(module)) return <Navigate to={getLandingPath()} replace />;
   return auth.role === "admin" || auth.role === "developer" ? (
     children
   ) : (
-    <Navigate to="/dashboard" replace />
+    <Navigate to={getLandingPath()} replace />
   );
 };
 
 const TicketsIndexRoute = () => {
   const auth = useAuthStore.getState();
   if (!auth.isAuthenticated) return <Navigate to="/login" replace />;
+  if (!moduleAccessStore.canAccess("tickets")) return <Navigate to={getLandingPath()} replace />;
   if (auth.role === "admin" || auth.role === "developer") {
     return <Navigate to="/tickets/open" replace />;
   }
@@ -65,12 +79,12 @@ const TicketsIndexRoute = () => {
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <Navigate to="/dashboard" replace />,
+    element: <Navigate to={getLandingPath()} replace />,
   },
   {
     path: "/dashboard",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute module="personal">
         <AppLayout>
           <DailyDashboardPage />
         </AppLayout>
@@ -88,7 +102,7 @@ export const router = createBrowserRouter([
   {
     path: "/tasks",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute module="personal">
         <AppLayout>
           <DailyTasksPage />
         </AppLayout>
@@ -98,7 +112,7 @@ export const router = createBrowserRouter([
   {
     path: "/notes",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute module="personal">
         <AppLayout>
           <DailyNotesPage />
         </AppLayout>
@@ -108,7 +122,7 @@ export const router = createBrowserRouter([
   {
     path: "/projects",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute module="personal">
         <AppLayout>
           <ProjectsPage />
         </AppLayout>
@@ -118,7 +132,7 @@ export const router = createBrowserRouter([
   {
     path: "/weekly",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute module="personal">
         <AppLayout>
           <WeeklyReviewPage />
         </AppLayout>
@@ -128,7 +142,7 @@ export const router = createBrowserRouter([
   {
     path: "/team-calendar",
     element: (
-      <TeamRoute>
+      <TeamRoute module="personal">
         <AppLayout>
           <TeamCalendarPage />
         </AppLayout>
@@ -138,7 +152,7 @@ export const router = createBrowserRouter([
   {
     path: "/pc-maintenance",
     element: (
-      <TeamRoute>
+      <TeamRoute module="work">
         <Navigate to="/maintenance/create" replace />
       </TeamRoute>
     ),
@@ -146,7 +160,7 @@ export const router = createBrowserRouter([
   {
     path: "/asset-maintenance",
     element: (
-      <TeamRoute>
+      <TeamRoute module="work">
         <Navigate to="/maintenance/create" replace />
       </TeamRoute>
     ),
@@ -154,7 +168,7 @@ export const router = createBrowserRouter([
   {
     path: "/maintenance/dashboard",
     element: (
-      <TeamRoute>
+      <TeamRoute module="work">
         <AppLayout>
           <MaintenanceDashboardPage />
         </AppLayout>
@@ -164,7 +178,7 @@ export const router = createBrowserRouter([
   {
     path: "/maintenance",
     element: (
-      <TeamRoute>
+      <TeamRoute module="work">
         <Navigate to="/maintenance/dashboard" replace />
       </TeamRoute>
     ),
@@ -172,7 +186,7 @@ export const router = createBrowserRouter([
   {
     path: "/maintenance/registry",
     element: (
-      <TeamRoute>
+      <TeamRoute module="work">
         <AppLayout>
           <MaintenanceRegistryPage />
         </AppLayout>
@@ -182,7 +196,7 @@ export const router = createBrowserRouter([
   {
     path: "/maintenance/create",
     element: (
-      <TeamRoute>
+      <TeamRoute module="work">
         <AppLayout>
           <MaintenanceCreatePage />
         </AppLayout>
@@ -192,7 +206,7 @@ export const router = createBrowserRouter([
   {
     path: "/tickets",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute module="tickets">
         <TicketsIndexRoute />
       </ProtectedRoute>
     ),
@@ -200,7 +214,7 @@ export const router = createBrowserRouter([
   {
     path: "/tickets/create",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute module="tickets">
         <AppLayout>
           <TicketsCreatePage />
         </AppLayout>
@@ -210,7 +224,7 @@ export const router = createBrowserRouter([
   {
     path: "/tickets/open",
     element: (
-      <TeamRoute>
+      <TeamRoute module="tickets">
         <AppLayout>
           <TicketsOpenPage />
         </AppLayout>
@@ -220,7 +234,7 @@ export const router = createBrowserRouter([
   {
     path: "/tickets/my",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute module="tickets">
         <AppLayout>
           <TicketsMyPage />
         </AppLayout>
@@ -230,7 +244,7 @@ export const router = createBrowserRouter([
   {
     path: "/tickets/my/:ticketId",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute module="tickets">
         <AppLayout>
           <TicketsUserDetailPage />
         </AppLayout>
@@ -240,7 +254,7 @@ export const router = createBrowserRouter([
   {
     path: "/tickets/:ticketId",
     element: (
-      <TeamRoute>
+      <TeamRoute module="tickets">
         <AppLayout>
           <TicketSolutionPage />
         </AppLayout>
@@ -250,7 +264,7 @@ export const router = createBrowserRouter([
   {
     path: "/notifications",
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute module="work">
         <AppLayout>
           <NotificationsPage />
         </AppLayout>
@@ -260,7 +274,7 @@ export const router = createBrowserRouter([
   {
     path: "/knowledge-base",
     element: (
-      <TeamRoute>
+      <TeamRoute module="work">
         <AppLayout>
           <KnowledgeBasePage />
         </AppLayout>
@@ -270,7 +284,7 @@ export const router = createBrowserRouter([
   {
     path: "/assets",
     element: (
-      <TeamRoute>
+      <TeamRoute module="assets">
         <Navigate to="/assets/dashboard" replace />
       </TeamRoute>
     ),
@@ -278,7 +292,7 @@ export const router = createBrowserRouter([
   {
     path: "/assets/dashboard",
     element: (
-      <TeamRoute>
+      <TeamRoute module="assets">
         <AppLayout>
           <AssetDashboardPage />
         </AppLayout>
@@ -288,7 +302,7 @@ export const router = createBrowserRouter([
   {
     path: "/assets/register",
     element: (
-      <TeamRoute>
+      <TeamRoute module="assets">
         <AppLayout>
           <AssetInventoryPage />
         </AppLayout>
@@ -298,7 +312,7 @@ export const router = createBrowserRouter([
   {
     path: "/assets/register/:assetId",
     element: (
-      <TeamRoute>
+      <TeamRoute module="assets">
         <AppLayout>
           <AssetInventoryPage />
         </AppLayout>
@@ -308,7 +322,7 @@ export const router = createBrowserRouter([
   {
     path: "/assets/list",
     element: (
-      <TeamRoute>
+      <TeamRoute module="assets">
         <AppLayout>
           <AssetListPage />
         </AppLayout>
@@ -351,6 +365,16 @@ export const router = createBrowserRouter([
       <AdminRoute>
         <AppLayout>
           <AdminUsersPage />
+        </AppLayout>
+      </AdminRoute>
+    ),
+  },
+  {
+    path: "/admin/module-access",
+    element: (
+      <AdminRoute>
+        <AppLayout>
+          <AdminModuleAccessPage />
         </AppLayout>
       </AdminRoute>
     ),

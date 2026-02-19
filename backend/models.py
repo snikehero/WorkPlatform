@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 
@@ -29,6 +29,17 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default=UserRole.user.value)
     preferred_language: Mapped[str] = mapped_column(String(5), default="en")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class RoleModuleAccess(Base):
+    __tablename__ = "role_module_access"
+    __table_args__ = (UniqueConstraint("role", "module", name="uq_role_module_access_role_module"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    role: Mapped[str] = mapped_column(String(20), index=True)
+    module: Mapped[str] = mapped_column(String(30), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class Project(Base):

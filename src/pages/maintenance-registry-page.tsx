@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/toast";
 import { exportMaintenanceRecordToExcel } from "@/lib/maintenance-excel";
 import { useI18n } from "@/i18n/i18n";
 import { maintenanceStore } from "@/stores/maintenance-store";
+import { maintenanceTemplateStore } from "@/stores/maintenance-template-store";
 import type { MaintenanceRecord } from "@/types/maintenance-record";
 import { MaintenanceList } from "@/components/maintenance/maintenance-list";
 
@@ -19,10 +20,8 @@ export const MaintenanceRegistryPage = () => {
   const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [selectedDate, setSelectedDate] = useState(today);
   const [filterMode, setFilterMode] = useState<"all" | "date">("all");
-  const [templateName, setTemplateName] = useState<string | null>(null);
-  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [templateState, setTemplateState] = useState(maintenanceTemplateStore.getState());
   const [exportMessage, setExportMessage] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadRecords = async () => {
     const data = await maintenanceStore.all();
@@ -31,6 +30,11 @@ export const MaintenanceRegistryPage = () => {
 
   useEffect(() => {
     loadRecords().catch(() => setRecords([]));
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = maintenanceTemplateStore.subscribe((next) => setTemplateState(next));
+    return unsubscribe;
   }, []);
 
   const visibleRecords = useMemo(() => {
@@ -48,18 +52,8 @@ export const MaintenanceRegistryPage = () => {
     }
   };
 
-  const handleTemplateUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setTemplateFile(file);
-    setTemplateName(file.name);
-    const infoMessage = `${t("maintenance.templateLoaded")}: ${file.name}`;
-    setExportMessage(infoMessage);
-    showToast(infoMessage, "info");
-    event.target.value = "";
-  };
-
   const handleExportRecord = async (record: MaintenanceRecord) => {
+    const templateFile = templateState.file;
     if (!templateFile) {
       const errorMessage = t("maintenance.uploadTemplateFirst");
       setExportMessage(errorMessage);
@@ -146,20 +140,7 @@ export const MaintenanceRegistryPage = () => {
                 </Popover>
               </div>
             ) : null}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xlsm"
-              className="hidden"
-              onChange={handleTemplateUpload}
-            />
-            <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
-              {templateName ? t("maintenance.replaceTemplate") : t("maintenance.loadTemplate")}
-            </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t("maintenance.templateLabel")}: {templateName ?? t("maintenance.notLoaded")}
-          </p>
           {exportMessage ? <p className="text-sm text-muted-foreground">{exportMessage}</p> : null}
         </CardContent>
       </Card>
@@ -168,7 +149,7 @@ export const MaintenanceRegistryPage = () => {
         records={visibleRecords}
         onDeleteRecord={handleDeleteRecord}
         onExportRecord={handleExportRecord}
-        canExport={Boolean(templateFile)}
+        canExport={Boolean(templateState.file)}
       />
     </div>
   );

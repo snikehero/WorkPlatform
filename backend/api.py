@@ -8,7 +8,7 @@ except ImportError:
 router = APIRouter()
 
 @router.post("/api/auth/register", response_model=AuthOut)
-def register(payload: AuthRegisterIn, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+def register(payload: AuthRegisterIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     normalized_email = normalize_login_identity(payload.email)
     existing = db.scalar(select(User).where(User.email == normalized_email))
     if existing:
@@ -54,6 +54,11 @@ def me(current_user: User = Depends(get_current_user)):
     }
 
 
+@router.get("/api/module-access/me", response_model=RoleModuleAccessMeOut)
+def get_my_module_access(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return RoleModuleAccessMeOut(role=current_user.role, modules=get_role_module_access_map(db, current_user.role))
+
+
 @router.patch("/api/account/preferences")
 def update_preferences(payload: LanguagePreferenceIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     language = payload.preferredLanguage.lower()
@@ -74,7 +79,7 @@ def change_password(payload: ChangePasswordIn, current_user: User = Depends(get_
 
 
 @router.get("/api/admin/users", response_model=list[AdminUserOut])
-def list_users(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+def list_users(_: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     users = db.scalars(select(User).order_by(User.created_at.desc())).all()
     return [
         AdminUserOut(
@@ -89,7 +94,7 @@ def list_users(_: User = Depends(require_admin), db: Session = Depends(get_db)):
 
 
 @router.post("/api/admin/users", response_model=AdminUserOut)
-def create_user(payload: AdminCreateUserIn, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+def create_user(payload: AdminCreateUserIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     normalized_email = normalize_login_identity(payload.email)
     existing = db.scalar(select(User).where(User.email == normalized_email))
     if existing:
@@ -113,7 +118,7 @@ def create_user(payload: AdminCreateUserIn, _: User = Depends(require_admin), db
 
 
 @router.patch("/api/admin/users/{user_id}", response_model=AdminUserOut)
-def update_user(user_id: str, payload: AdminUpdateUserIn, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def update_user(user_id: str, payload: AdminUpdateUserIn, current_admin: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -137,7 +142,7 @@ def update_user(user_id: str, payload: AdminUpdateUserIn, current_admin: User = 
 
 
 @router.post("/api/admin/users/{user_id}/reset-password")
-def reset_user_password(user_id: str, payload: AdminResetPasswordIn, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+def reset_user_password(user_id: str, payload: AdminResetPasswordIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -147,7 +152,7 @@ def reset_user_password(user_id: str, payload: AdminResetPasswordIn, _: User = D
 
 
 @router.delete("/api/admin/users/{user_id}")
-def delete_user(user_id: str, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def delete_user(user_id: str, current_admin: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -159,7 +164,7 @@ def delete_user(user_id: str, current_admin: User = Depends(require_admin), db: 
 
 
 @router.get("/api/admin/people", response_model=list[PersonOut])
-def list_people(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+def list_people(_: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     items = db.scalars(select(Person).order_by(Person.name.asc())).all()
     return [person_to_out(item) for item in items]
 
@@ -190,7 +195,7 @@ def resolve_person_user_email(raw_email: str, name: str, db: Session, exclude_us
 
 
 @router.post("/api/admin/people", response_model=PersonOut)
-def create_person(payload: PersonIn, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+def create_person(payload: PersonIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
@@ -227,7 +232,7 @@ def create_person(payload: PersonIn, _: User = Depends(require_admin), db: Sessi
 
 
 @router.patch("/api/admin/people/{person_id}", response_model=PersonOut)
-def update_person(person_id: str, payload: PersonIn, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+def update_person(person_id: str, payload: PersonIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     item = db.get(Person, person_id)
     if not item:
         raise HTTPException(status_code=404, detail="Person not found")
@@ -265,7 +270,7 @@ def update_person(person_id: str, payload: PersonIn, _: User = Depends(require_a
 
 
 @router.delete("/api/admin/people/{person_id}")
-def delete_person(person_id: str, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+def delete_person(person_id: str, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     item = db.get(Person, person_id)
     if not item:
         raise HTTPException(status_code=404, detail="Person not found")
@@ -275,13 +280,13 @@ def delete_person(person_id: str, _: User = Depends(require_admin), db: Session 
 
 
 @router.get("/api/projects", response_model=list[ProjectOut])
-def list_projects(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_projects(current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     projects = db.scalars(select(Project).where(Project.owner_id == current_user.id).order_by(Project.created_at.desc())).all()
     return [project_to_out(item) for item in projects]
 
 
 @router.post("/api/projects", response_model=ProjectOut)
-def create_project(payload: ProjectIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_project(payload: ProjectIn, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     project = Project(owner_id=current_user.id, name=payload.name, description=payload.description)
     db.add(project)
     db.commit()
@@ -290,7 +295,7 @@ def create_project(payload: ProjectIn, current_user: User = Depends(get_current_
 
 
 @router.delete("/api/projects/{project_id}")
-def delete_project(project_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_project(project_id: str, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_id == current_user.id))
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -300,13 +305,13 @@ def delete_project(project_id: str, current_user: User = Depends(get_current_use
 
 
 @router.get("/api/tasks", response_model=list[TaskOut])
-def list_tasks(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_tasks(current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     tasks = db.scalars(select(Task).where(Task.owner_id == current_user.id).order_by(Task.created_at.desc())).all()
     return [task_to_out(item) for item in tasks]
 
 
 @router.post("/api/tasks", response_model=TaskOut)
-def create_task(payload: TaskIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_task(payload: TaskIn, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     task = Task(
         owner_id=current_user.id,
         title=payload.title,
@@ -322,7 +327,7 @@ def create_task(payload: TaskIn, current_user: User = Depends(get_current_user),
 
 
 @router.patch("/api/tasks/{task_id}/status")
-def update_task_status(task_id: str, payload: TaskStatusPatch, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_task_status(task_id: str, payload: TaskStatusPatch, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     task = db.scalar(select(Task).where(Task.id == task_id, Task.owner_id == current_user.id))
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -332,7 +337,7 @@ def update_task_status(task_id: str, payload: TaskStatusPatch, current_user: Use
 
 
 @router.delete("/api/tasks/{task_id}")
-def delete_task(task_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_task(task_id: str, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     task = db.scalar(select(Task).where(Task.id == task_id, Task.owner_id == current_user.id))
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -342,13 +347,13 @@ def delete_task(task_id: str, current_user: User = Depends(get_current_user), db
 
 
 @router.get("/api/notes", response_model=list[NoteOut])
-def list_notes(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_notes(current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     notes = db.scalars(select(Note).where(Note.owner_id == current_user.id).order_by(Note.created_at.desc())).all()
     return [note_to_out(item) for item in notes]
 
 
 @router.post("/api/notes", response_model=NoteOut)
-def create_note(payload: NoteIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_note(payload: NoteIn, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     note = Note(owner_id=current_user.id, title=payload.title, content=payload.content, note_date=parse_date(payload.noteDate))
     db.add(note)
     db.commit()
@@ -357,7 +362,7 @@ def create_note(payload: NoteIn, current_user: User = Depends(get_current_user),
 
 
 @router.delete("/api/notes/{note_id}")
-def delete_note(note_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_note(note_id: str, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     note = db.scalar(select(Note).where(Note.id == note_id, Note.owner_id == current_user.id))
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
@@ -367,7 +372,7 @@ def delete_note(note_id: str, current_user: User = Depends(get_current_user), db
 
 
 @router.get("/api/notifications", response_model=list[NotificationOut])
-def list_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_notifications(current_user: User = Depends(require_work_access), db: Session = Depends(get_db)):
     notifications = db.scalars(
         select(Notification)
         .where(Notification.owner_id == current_user.id)
@@ -377,7 +382,7 @@ def list_notifications(current_user: User = Depends(get_current_user), db: Sessi
 
 
 @router.post("/api/notifications", response_model=NotificationOut)
-def create_notification(payload: NotificationIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_notification(payload: NotificationIn, current_user: User = Depends(require_work_access), db: Session = Depends(get_db)):
     category = payload.category.strip().lower()
     if category not in ("info", "reminder", "warning"):
         raise HTTPException(status_code=400, detail="category must be info|reminder|warning")
@@ -399,7 +404,7 @@ def create_notification(payload: NotificationIn, current_user: User = Depends(ge
 def patch_notification_read(
     notification_id: str,
     payload: NotificationReadPatchIn,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_work_access),
     db: Session = Depends(get_db),
 ):
     item = db.scalar(select(Notification).where(Notification.id == notification_id, Notification.owner_id == current_user.id))
@@ -411,7 +416,7 @@ def patch_notification_read(
 
 
 @router.delete("/api/notifications/{notification_id}")
-def delete_notification(notification_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_notification(notification_id: str, current_user: User = Depends(require_work_access), db: Session = Depends(get_db)):
     item = db.scalar(select(Notification).where(Notification.id == notification_id, Notification.owner_id == current_user.id))
     if not item:
         raise HTTPException(status_code=404, detail="Notification not found")
@@ -421,7 +426,7 @@ def delete_notification(notification_id: str, current_user: User = Depends(get_c
 
 
 @router.get("/api/knowledge-base", response_model=list[KnowledgeArticleOut])
-def list_knowledge_articles(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def list_knowledge_articles(current_user: User = Depends(require_team_work_access), db: Session = Depends(get_db)):
     articles = db.scalars(
         select(KnowledgeArticle)
         .order_by(KnowledgeArticle.updated_at.desc())
@@ -430,7 +435,7 @@ def list_knowledge_articles(current_user: User = Depends(require_developer_or_ad
 
 
 @router.post("/api/knowledge-base", response_model=KnowledgeArticleOut)
-def create_knowledge_article(payload: KnowledgeArticleIn, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def create_knowledge_article(payload: KnowledgeArticleIn, current_user: User = Depends(require_team_work_access), db: Session = Depends(get_db)):
     article = KnowledgeArticle(
         owner_id=current_user.id,
         title=payload.title.strip(),
@@ -448,7 +453,7 @@ def create_knowledge_article(payload: KnowledgeArticleIn, current_user: User = D
 def update_knowledge_article(
     article_id: str,
     payload: KnowledgeArticleIn,
-    current_user: User = Depends(require_developer_or_admin),
+    current_user: User = Depends(require_team_work_access),
     db: Session = Depends(get_db),
 ):
     article = db.scalar(select(KnowledgeArticle).where(KnowledgeArticle.id == article_id))
@@ -465,7 +470,7 @@ def update_knowledge_article(
 
 
 @router.delete("/api/knowledge-base/{article_id}")
-def delete_knowledge_article(article_id: str, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def delete_knowledge_article(article_id: str, current_user: User = Depends(require_team_work_access), db: Session = Depends(get_db)):
     article = db.scalar(select(KnowledgeArticle).where(KnowledgeArticle.id == article_id))
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
@@ -475,7 +480,7 @@ def delete_knowledge_article(article_id: str, current_user: User = Depends(requi
 
 
 @router.get("/api/assets", response_model=list[AssetOut])
-def list_assets(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_assets(current_user: User = Depends(require_assets_access), db: Session = Depends(get_db)):
     if current_user.role in (UserRole.admin.value, UserRole.developer.value):
         items = db.scalars(select(Asset).order_by(Asset.updated_at.desc())).all()
     else:
@@ -484,7 +489,7 @@ def list_assets(current_user: User = Depends(get_current_user), db: Session = De
 
 
 @router.get("/api/assets/{asset_id}/history", response_model=list[AssetEventOut])
-def list_asset_history(asset_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_asset_history(asset_id: str, current_user: User = Depends(require_assets_access), db: Session = Depends(get_db)):
     if current_user.role in (UserRole.admin.value, UserRole.developer.value):
         item = db.scalar(select(Asset).where(Asset.id == asset_id))
     else:
@@ -496,7 +501,7 @@ def list_asset_history(asset_id: str, current_user: User = Depends(get_current_u
 
 
 @router.post("/api/assets", response_model=AssetOut)
-def create_asset(payload: AssetIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_asset(payload: AssetIn, current_user: User = Depends(require_assets_access), db: Session = Depends(get_db)):
     status_value = payload.status.strip().lower()
     if status_value not in ("active", "maintenance", "retired", "lost"):
         raise HTTPException(status_code=400, detail="status must be active|maintenance|retired|lost")
@@ -544,7 +549,7 @@ def create_asset(payload: AssetIn, current_user: User = Depends(get_current_user
 
 
 @router.patch("/api/assets/{asset_id}", response_model=AssetOut)
-def update_asset(asset_id: str, payload: AssetIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_asset(asset_id: str, payload: AssetIn, current_user: User = Depends(require_assets_access), db: Session = Depends(get_db)):
     if current_user.role in (UserRole.admin.value, UserRole.developer.value):
         item = db.scalar(select(Asset).where(Asset.id == asset_id))
     else:
@@ -621,7 +626,7 @@ def update_asset(asset_id: str, payload: AssetIn, current_user: User = Depends(g
 
 
 @router.delete("/api/assets/{asset_id}")
-def delete_asset(asset_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_asset(asset_id: str, current_user: User = Depends(require_assets_access), db: Session = Depends(get_db)):
     if current_user.role in (UserRole.admin.value, UserRole.developer.value):
         item = db.scalar(select(Asset).where(Asset.id == asset_id))
     else:
@@ -640,14 +645,75 @@ def delete_asset(asset_id: str, current_user: User = Depends(get_current_user), 
     return {"ok": True}
 
 
+@router.get("/api/admin/module-access", response_model=list[RoleModuleAccessOut])
+def list_module_access(_: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+    output: list[RoleModuleAccessOut] = []
+    for role_name in (UserRole.admin.value, UserRole.developer.value, UserRole.user.value):
+        current = get_role_module_access_map(db, role_name)
+        for module_name in MODULE_NAMES:
+            row = db.scalar(
+                select(RoleModuleAccess).where(
+                    RoleModuleAccess.role == role_name,
+                    RoleModuleAccess.module == module_name,
+                )
+            )
+            updated_at = row.updated_at if row else datetime.now(timezone.utc)
+            output.append(
+                RoleModuleAccessOut(
+                    role=role_name,
+                    module=module_name,
+                    enabled=bool(current.get(module_name, True)),
+                    updatedAt=to_iso(updated_at),
+                )
+            )
+    return output
+
+
+@router.patch("/api/admin/module-access/{role_name}/{module_name}", response_model=RoleModuleAccessOut)
+def patch_module_access(
+    role_name: str,
+    module_name: str,
+    payload: RoleModuleAccessPatchIn,
+    current_admin: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    normalized_role = normalize_role_name(role_name)
+    normalized_module = normalize_module_name(module_name)
+    if normalized_role == UserRole.admin.value and normalized_module == "admin" and not payload.enabled:
+        raise HTTPException(status_code=400, detail="Cannot disable admin module for admin role")
+    row = db.scalar(
+        select(RoleModuleAccess).where(
+            RoleModuleAccess.role == normalized_role,
+            RoleModuleAccess.module == normalized_module,
+        )
+    )
+    now = datetime.now(timezone.utc)
+    if not row:
+        row = RoleModuleAccess(
+            role=normalized_role,
+            module=normalized_module,
+            enabled=payload.enabled,
+            updated_at=now,
+        )
+        db.add(row)
+    else:
+        row.enabled = payload.enabled
+        row.updated_at = now
+    if normalized_role == current_admin.role and normalized_module == "admin" and not payload.enabled:
+        raise HTTPException(status_code=400, detail="Cannot remove your own admin module access")
+    db.commit()
+    db.refresh(row)
+    return RoleModuleAccessOut(role=row.role, module=row.module, enabled=row.enabled, updatedAt=to_iso(row.updated_at))
+
+
 @router.get("/api/team-events", response_model=list[TeamEventOut])
-def list_team_events(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def list_team_events(current_user: User = Depends(require_team_personal_access), db: Session = Depends(get_db)):
     events = db.scalars(select(TeamEvent).where(TeamEvent.owner_id == current_user.id).order_by(TeamEvent.created_at.desc())).all()
     return [team_event_to_out(item) for item in events]
 
 
 @router.post("/api/team-events", response_model=TeamEventOut)
-def create_team_event(payload: TeamEventIn, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def create_team_event(payload: TeamEventIn, current_user: User = Depends(require_team_personal_access), db: Session = Depends(get_db)):
     event = TeamEvent(
         owner_id=current_user.id,
         title=payload.title,
@@ -663,7 +729,7 @@ def create_team_event(payload: TeamEventIn, current_user: User = Depends(require
 
 
 @router.delete("/api/team-events/{event_id}")
-def delete_team_event(event_id: str, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def delete_team_event(event_id: str, current_user: User = Depends(require_team_personal_access), db: Session = Depends(get_db)):
     event = db.scalar(select(TeamEvent).where(TeamEvent.id == event_id, TeamEvent.owner_id == current_user.id))
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -673,7 +739,7 @@ def delete_team_event(event_id: str, current_user: User = Depends(require_develo
 
 
 @router.delete("/api/team-events")
-def delete_team_events_by_date(eventDate: str, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def delete_team_events_by_date(eventDate: str, current_user: User = Depends(require_team_personal_access), db: Session = Depends(get_db)):
     target_date = parse_date(eventDate)
     events = db.scalars(select(TeamEvent).where(TeamEvent.owner_id == current_user.id, TeamEvent.event_date == target_date)).all()
     for item in events:
@@ -683,7 +749,7 @@ def delete_team_events_by_date(eventDate: str, current_user: User = Depends(requ
 
 
 @router.get("/api/tickets/mine", response_model=list[TicketOut])
-def list_my_tickets(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_my_tickets(current_user: User = Depends(require_tickets_access), db: Session = Depends(get_db)):
     tickets = db.scalars(
         select(Ticket)
         .where(Ticket.requester_id == current_user.id)
@@ -693,7 +759,7 @@ def list_my_tickets(current_user: User = Depends(get_current_user), db: Session 
 
 
 @router.get("/api/tickets/mine/{ticket_id}", response_model=TicketOut)
-def get_my_ticket(ticket_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_my_ticket(ticket_id: str, current_user: User = Depends(require_tickets_access), db: Session = Depends(get_db)):
     ticket = db.scalar(select(Ticket).where(Ticket.id == ticket_id, Ticket.requester_id == current_user.id))
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -701,7 +767,7 @@ def get_my_ticket(ticket_id: str, current_user: User = Depends(get_current_user)
 
 
 @router.get("/api/tickets/mine/{ticket_id}/events", response_model=list[TicketEventOut])
-def list_my_ticket_events(ticket_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_my_ticket_events(ticket_id: str, current_user: User = Depends(require_tickets_access), db: Session = Depends(get_db)):
     ticket = db.scalar(select(Ticket).where(Ticket.id == ticket_id, Ticket.requester_id == current_user.id))
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -712,7 +778,7 @@ def list_my_ticket_events(ticket_id: str, current_user: User = Depends(get_curre
 
 
 @router.delete("/api/tickets/mine/{ticket_id}")
-def delete_my_ticket(ticket_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_my_ticket(ticket_id: str, current_user: User = Depends(require_tickets_access), db: Session = Depends(get_db)):
     ticket = db.scalar(select(Ticket).where(Ticket.id == ticket_id, Ticket.requester_id == current_user.id))
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -725,7 +791,7 @@ def delete_my_ticket(ticket_id: str, current_user: User = Depends(get_current_us
 
 
 @router.post("/api/tickets", response_model=TicketOut)
-def create_ticket(payload: TicketIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_ticket(payload: TicketIn, current_user: User = Depends(require_tickets_access), db: Session = Depends(get_db)):
     category = normalize_ticket_category(payload.category)
     priority = normalize_ticket_priority(payload.priority)
     now = datetime.now(timezone.utc)
@@ -757,7 +823,7 @@ def create_ticket(payload: TicketIn, current_user: User = Depends(get_current_us
 
 
 @router.get("/api/tickets/open", response_model=list[TicketOut])
-def list_open_tickets(_: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def list_open_tickets(_: User = Depends(require_team_tickets_access), db: Session = Depends(get_db)):
     tickets = db.scalars(
         select(Ticket)
         .where(Ticket.status.in_(TICKET_ACTIVE_STATUSES))
@@ -767,7 +833,7 @@ def list_open_tickets(_: User = Depends(require_developer_or_admin), db: Session
 
 
 @router.get("/api/tickets/open-unassigned", response_model=list[TicketOut])
-def list_open_unassigned_tickets(_: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def list_open_unassigned_tickets(_: User = Depends(require_team_tickets_access), db: Session = Depends(get_db)):
     tickets = db.scalars(
         select(Ticket)
         .where(Ticket.status.in_(TICKET_ACTIVE_STATUSES), Ticket.assignee_id.is_(None))
@@ -777,7 +843,7 @@ def list_open_unassigned_tickets(_: User = Depends(require_developer_or_admin), 
 
 
 @router.get("/api/tickets/assigned-mine", response_model=list[TicketOut])
-def list_assigned_my_tickets(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def list_assigned_my_tickets(current_user: User = Depends(require_team_tickets_access), db: Session = Depends(get_db)):
     tickets = db.scalars(
         select(Ticket)
         .where(Ticket.assignee_id == current_user.id)
@@ -787,7 +853,7 @@ def list_assigned_my_tickets(current_user: User = Depends(require_developer_or_a
 
 
 @router.get("/api/tickets/assignable-users", response_model=list[TicketAssigneeOut])
-def list_ticket_assignable_users(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def list_ticket_assignable_users(current_user: User = Depends(require_team_tickets_access), db: Session = Depends(get_db)):
     if current_user.role == UserRole.admin.value:
         items = db.scalars(
             select(User)
@@ -800,7 +866,7 @@ def list_ticket_assignable_users(current_user: User = Depends(require_developer_
 
 
 @router.get("/api/tickets/{ticket_id}", response_model=TicketOut)
-def get_ticket(ticket_id: str, _: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def get_ticket(ticket_id: str, _: User = Depends(require_team_tickets_access), db: Session = Depends(get_db)):
     ticket = db.get(Ticket, ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -809,7 +875,7 @@ def get_ticket(ticket_id: str, _: User = Depends(require_developer_or_admin), db
 
 
 @router.patch("/api/tickets/{ticket_id}", response_model=TicketOut)
-def patch_ticket(ticket_id: str, payload: TicketPatchIn, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def patch_ticket(ticket_id: str, payload: TicketPatchIn, current_user: User = Depends(require_team_tickets_access), db: Session = Depends(get_db)):
     ticket = db.get(Ticket, ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -879,7 +945,7 @@ def patch_ticket(ticket_id: str, payload: TicketPatchIn, current_user: User = De
 
 
 @router.patch("/api/tickets/{ticket_id}/assign", response_model=TicketOut)
-def assign_ticket(ticket_id: str, payload: TicketAssignIn, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def assign_ticket(ticket_id: str, payload: TicketAssignIn, current_user: User = Depends(require_team_tickets_access), db: Session = Depends(get_db)):
     ticket = db.get(Ticket, ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -901,7 +967,7 @@ def assign_ticket(ticket_id: str, payload: TicketAssignIn, current_user: User = 
 
 
 @router.get("/api/tickets/{ticket_id}/events", response_model=list[TicketEventOut])
-def list_ticket_events(ticket_id: str, _: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def list_ticket_events(ticket_id: str, _: User = Depends(require_team_tickets_access), db: Session = Depends(get_db)):
     ticket = db.get(Ticket, ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -912,7 +978,7 @@ def list_ticket_events(ticket_id: str, _: User = Depends(require_developer_or_ad
 
 
 @router.get("/api/maintenance-records", response_model=list[MaintenanceRecordOut])
-def list_maintenance_records(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def list_maintenance_records(current_user: User = Depends(require_team_work_access), db: Session = Depends(get_db)):
     if current_user.role in (UserRole.admin.value, UserRole.developer.value):
         records = db.scalars(select(MaintenanceRecord).order_by(MaintenanceRecord.created_at.desc())).all()
     else:
@@ -923,7 +989,7 @@ def list_maintenance_records(current_user: User = Depends(require_developer_or_a
 
 
 @router.post("/api/maintenance-records", response_model=MaintenanceRecordOut)
-def create_maintenance_record(payload: MaintenanceRecordIn, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def create_maintenance_record(payload: MaintenanceRecordIn, current_user: User = Depends(require_team_work_access), db: Session = Depends(get_db)):
     maintenance_type = payload.maintenanceType.upper()
     if maintenance_type not in ("P", "C"):
         raise HTTPException(status_code=400, detail="maintenanceType must be P or C")
@@ -976,7 +1042,7 @@ def create_maintenance_record(payload: MaintenanceRecordIn, current_user: User =
 
 
 @router.delete("/api/maintenance-records/{record_id}")
-def delete_maintenance_record(record_id: str, current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)):
+def delete_maintenance_record(record_id: str, current_user: User = Depends(require_team_work_access), db: Session = Depends(get_db)):
     if current_user.role in (UserRole.admin.value, UserRole.developer.value):
         record = db.scalar(select(MaintenanceRecord).where(MaintenanceRecord.id == record_id))
     else:
@@ -1030,7 +1096,7 @@ def _normalize_consecutive_4(value: str) -> str:
 async def export_maintenance(
     template: UploadFile = File(...),
     payload: str = Form(...),
-    current_user: User = Depends(require_developer_or_admin),
+    current_user: User = Depends(require_team_work_access),
     db: Session = Depends(get_db),
 ):
     if not template.filename:
@@ -1147,3 +1213,5 @@ async def export_maintenance(
         media_type=media_type,
         headers={"Content-Disposition": content_disposition},
     )
+
+

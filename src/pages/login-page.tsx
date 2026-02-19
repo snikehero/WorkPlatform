@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/stores/auth-store";
 import { useI18n } from "@/i18n/i18n";
+import { moduleAccessStore } from "@/stores/module-access-store";
+import { getDefaultLandingPath } from "@/lib/module-access";
 
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -20,7 +22,9 @@ export const LoginPage = () => {
 
     try {
       await useAuthStore.login(email.trim(), password.trim());
-      navigate("/tasks");
+      const auth = useAuthStore.getState();
+      const destination = getDefaultLandingPath(auth.role, moduleAccessStore.getState().modules);
+      navigate(destination);
     } catch (err) {
       const message = err instanceof Error ? err.message : t("login.invalidCredentials");
       setError(message);

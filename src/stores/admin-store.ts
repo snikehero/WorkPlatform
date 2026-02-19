@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api";
+import type { AppModule, AppRole, RoleModuleAccess } from "@/types/module-access";
 import type { AppUser } from "@/types/user";
 
 export const adminStore = {
@@ -20,4 +21,10 @@ export const adminStore = {
     }),
   deleteUser: (id: string) =>
     apiRequest<{ ok: boolean }>(`/api/admin/users/${id}`, { method: "DELETE" }),
+  allModuleAccess: () => apiRequest<RoleModuleAccess[]>("/api/admin/module-access"),
+  updateModuleAccess: (role: AppRole, module: AppModule, enabled: boolean) =>
+    apiRequest<RoleModuleAccess>(`/api/admin/module-access/${role}/${module}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
 };

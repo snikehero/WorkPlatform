@@ -46,6 +46,22 @@ class AdminResetPasswordIn(BaseModel):
     password: str = Field(min_length=6, max_length=128)
 
 
+class RoleModuleAccessOut(BaseModel):
+    role: str
+    module: str
+    enabled: bool
+    updatedAt: str
+
+
+class RoleModuleAccessPatchIn(BaseModel):
+    enabled: bool
+
+
+class RoleModuleAccessMeOut(BaseModel):
+    role: str
+    modules: dict[str, bool]
+
+
 class PersonIn(BaseModel):
     name: str
     email: str = ""

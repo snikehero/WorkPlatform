@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 try:
-    from .auth import get_current_user
+    from .auth import get_current_user, get_db
     from .models import (
         Asset,
         AssetEvent,
@@ -24,6 +24,7 @@ try:
         Ticket,
         TicketEvent,
         User,
+        RoleModuleAccess,
         UserRole,
     )
     from .schemas import (
@@ -43,7 +44,7 @@ try:
         TicketOut,
     )
 except ImportError:
-    from auth import get_current_user
+    from auth import get_current_user, get_db
     from models import (
         Asset,
         AssetEvent,
@@ -59,6 +60,7 @@ except ImportError:
         Ticket,
         TicketEvent,
         User,
+        RoleModuleAccess,
         UserRole,
     )
     from schemas import (
@@ -79,6 +81,31 @@ except ImportError:
     )
 
 UNASSIGNED_USER_LABEL = "Unassigned"
+MODULE_NAMES: tuple[str, ...] = ("personal", "work", "tickets", "assets", "admin")
+
+DEFAULT_ROLE_MODULE_ACCESS: dict[str, dict[str, bool]] = {
+    UserRole.admin.value: {
+        "personal": True,
+        "work": True,
+        "tickets": True,
+        "assets": True,
+        "admin": True,
+    },
+    UserRole.developer.value: {
+        "personal": True,
+        "work": True,
+        "tickets": True,
+        "assets": True,
+        "admin": False,
+    },
+    UserRole.user.value: {
+        "personal": True,
+        "work": True,
+        "tickets": True,
+        "assets": False,
+        "admin": False,
+    },
+}
 
 
 def parse_date(value: str) -> date:
@@ -313,6 +340,50 @@ def validate_assignment_permission(current_user: User, assignee_id: str | None) 
     raise HTTPException(status_code=403, detail="Only admin or developer can assign tickets")
 
 
+def normalize_module_name(module_name: str) -> str:
+    normalized = (module_name or "").strip().lower()
+    if normalized not in MODULE_NAMES:
+        allowed = "|".join(MODULE_NAMES)
+        raise HTTPException(status_code=400, detail=f"module must be {allowed}")
+    return normalized
+
+
+def normalize_role_name(role_name: str) -> str:
+    normalized = (role_name or "").strip().lower()
+    if normalized not in (UserRole.admin.value, UserRole.developer.value, UserRole.user.value):
+        allowed = f"{UserRole.admin.value}|{UserRole.developer.value}|{UserRole.user.value}"
+        raise HTTPException(status_code=400, detail=f"role must be {allowed}")
+    return normalized
+
+
+def default_role_module_access(role_name: str) -> dict[str, bool]:
+    role_key = normalize_role_name(role_name)
+    defaults = DEFAULT_ROLE_MODULE_ACCESS.get(role_key)
+    if defaults is None:
+        return {module: True for module in MODULE_NAMES}
+    return {module: bool(defaults.get(module, True)) for module in MODULE_NAMES}
+
+
+def get_role_module_access_map(db: Session, role_name: str) -> dict[str, bool]:
+    role_key = normalize_role_name(role_name)
+    result = default_role_module_access(role_key)
+    rows = db.scalars(select(RoleModuleAccess).where(RoleModuleAccess.role == role_key)).all()
+    for row in rows:
+        if row.module in MODULE_NAMES:
+            result[row.module] = bool(row.enabled)
+    if role_key == UserRole.admin.value:
+        # Safety: never let admins lose access to the admin module.
+        result["admin"] = True
+    return result
+
+
+def ensure_module_access(current_user: User, db: Session, module_name: str) -> None:
+    normalized_module = normalize_module_name(module_name)
+    permissions = get_role_module_access_map(db, current_user.role)
+    if not permissions.get(normalized_module, True):
+        raise HTTPException(status_code=403, detail=f"Module '{normalized_module}' is disabled for role '{current_user.role}'")
+
+
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != UserRole.admin.value:
         raise HTTPException(status_code=403, detail="Admin role required")
@@ -322,6 +393,51 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 def require_developer_or_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role not in (UserRole.admin.value, UserRole.developer.value):
         raise HTTPException(status_code=403, detail="Developer or admin role required")
+    return current_user
+
+
+def require_admin_access(current_user: User = Depends(require_admin), db: Session = Depends(get_db)) -> User:
+    ensure_module_access(current_user, db, "admin")
+    return current_user
+
+
+def require_personal_access(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    ensure_module_access(current_user, db, "personal")
+    return current_user
+
+
+def require_work_access(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    ensure_module_access(current_user, db, "work")
+    return current_user
+
+
+def require_tickets_access(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    ensure_module_access(current_user, db, "tickets")
+    return current_user
+
+
+def require_assets_access(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    ensure_module_access(current_user, db, "assets")
+    return current_user
+
+
+def require_team_work_access(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)) -> User:
+    ensure_module_access(current_user, db, "work")
+    return current_user
+
+
+def require_team_personal_access(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)) -> User:
+    ensure_module_access(current_user, db, "personal")
+    return current_user
+
+
+def require_team_tickets_access(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)) -> User:
+    ensure_module_access(current_user, db, "tickets")
+    return current_user
+
+
+def require_team_assets_access(current_user: User = Depends(require_developer_or_admin), db: Session = Depends(get_db)) -> User:
+    ensure_module_access(current_user, db, "assets")
     return current_user
 
 

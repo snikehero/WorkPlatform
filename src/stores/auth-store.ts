@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api";
+import { moduleAccessStore } from "@/stores/module-access-store";
 
 const AUTH_KEY = "workplatform-auth";
 
@@ -57,6 +58,7 @@ export const useAuthStore = {
       preferredLanguage: result.preferred_language,
     };
     saveState();
+    await moduleAccessStore.refreshMine().catch(() => moduleAccessStore.resetToRoleDefaults(state.role));
     return true;
   },
   register: async (
@@ -76,6 +78,7 @@ export const useAuthStore = {
       preferredLanguage: result.preferred_language,
     };
     saveState();
+    await moduleAccessStore.refreshMine().catch(() => moduleAccessStore.resetToRoleDefaults(state.role));
     return true;
   },
   refreshMe: async () => {
@@ -94,10 +97,12 @@ export const useAuthStore = {
         preferredLanguage: me.preferred_language,
       };
       saveState();
+      await moduleAccessStore.refreshMine().catch(() => moduleAccessStore.resetToRoleDefaults(state.role));
       return true;
     } catch {
       state = { isAuthenticated: false, userEmail: null, role: null, token: null, preferredLanguage: "en" };
       localStorage.removeItem(AUTH_KEY);
+      moduleAccessStore.clear();
       return false;
     }
   },
@@ -120,5 +125,6 @@ export const useAuthStore = {
   logout: () => {
     state = { isAuthenticated: false, userEmail: null, role: null, token: null, preferredLanguage: "en" };
     localStorage.removeItem(AUTH_KEY);
+    moduleAccessStore.clear();
   },
 };

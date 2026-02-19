@@ -42,6 +42,21 @@ export const AdminDashboardPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("admin.moduleAccessTitle")}</CardTitle>
+          <CardDescription>{t("admin.moduleAccessSubtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">{t("admin.moduleAccessHint")}</p>
+            <Link to="/admin/module-access">
+              <Button type="button" variant="secondary">{t("admin.openModuleAccess")}</Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
