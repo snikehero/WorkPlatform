@@ -30,6 +30,7 @@ import { moduleAccessStore } from "@/stores/module-access-store";
 import { getDefaultLandingPath } from "@/lib/module-access";
 import type { AppModule } from "@/types/module-access";
 import { AdminModuleAccessPage } from "@/pages/admin-module-access-page";
+import { ActivateAccountPage } from "@/pages/activate-account-page";
 
 const getLandingPath = () => {
   const auth = useAuthStore.getState();
@@ -96,6 +97,14 @@ export const router = createBrowserRouter([
     element: (
       <PublicOnlyRoute>
         <LoginPage />
+      </PublicOnlyRoute>
+    ),
+  },
+  {
+    path: "/activate",
+    element: (
+      <PublicOnlyRoute>
+        <ActivateAccountPage />
       </PublicOnlyRoute>
     ),
   },

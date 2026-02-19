@@ -16,6 +16,11 @@ class AuthLoginIn(BaseModel):
     password: str
 
 
+class AuthActivateIn(BaseModel):
+    token: str
+    newPassword: str = Field(min_length=8, max_length=128)
+
+
 class AuthOut(BaseModel):
     token: str
     user_email: str
@@ -28,13 +33,26 @@ class AdminUserOut(BaseModel):
     email: str
     role: str
     preferredLanguage: str
+    mustSetPassword: bool
     createdAt: str
 
 
 class AdminCreateUserIn(BaseModel):
     email: str
-    password: str = Field(min_length=6, max_length=128)
+    password: str | None = Field(default=None, min_length=6, max_length=128)
     role: UserRole = UserRole.user
+
+
+class AdminCreateUserOut(AdminUserOut):
+    activationToken: str
+    activationExpiresAt: str
+
+
+class AdminUserActivationOut(BaseModel):
+    userId: str
+    email: str
+    activationToken: str
+    activationExpiresAt: str
 
 
 class AdminUpdateUserIn(BaseModel):
@@ -84,6 +102,8 @@ class PersonOut(BaseModel):
     department: str
     mobile: str
     notes: str
+    activationToken: str | None = None
+    activationExpiresAt: str | None = None
     createdAt: str
     updatedAt: str
 

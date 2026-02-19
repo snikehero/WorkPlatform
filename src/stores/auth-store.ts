@@ -9,6 +9,10 @@ type AuthState = {
   role: "admin" | "developer" | "user" | null;
   token: string | null;
   preferredLanguage: "en" | "es";
+  name: string | null;
+  department: string | null;
+  title: string | null;
+  mobile: string | null;
 };
 
 type AuthResponse = {
@@ -16,12 +20,26 @@ type AuthResponse = {
   user_email: string;
   role: "admin" | "developer" | "user";
   preferred_language: "en" | "es";
+  name?: string | null;
+  department?: string | null;
+  title?: string | null;
+  mobile?: string | null;
 };
 
 const loadState = (): AuthState => {
   const raw = localStorage.getItem(AUTH_KEY);
   if (!raw) {
-    return { isAuthenticated: false, userEmail: null, role: null, token: null, preferredLanguage: "en" };
+    return {
+      isAuthenticated: false,
+      userEmail: null,
+      role: null,
+      token: null,
+      preferredLanguage: "en",
+      name: null,
+      department: null,
+      title: null,
+      mobile: null,
+    };
   }
   try {
     const parsed = JSON.parse(raw) as Partial<AuthState>;
@@ -31,9 +49,23 @@ const loadState = (): AuthState => {
       role: parsed.role ?? null,
       token: parsed.token ?? null,
       preferredLanguage: parsed.preferredLanguage === "es" ? "es" : "en",
+      name: parsed.name ?? null,
+      department: parsed.department ?? null,
+      title: parsed.title ?? null,
+      mobile: parsed.mobile ?? null,
     };
   } catch {
-    return { isAuthenticated: false, userEmail: null, role: null, token: null, preferredLanguage: "en" };
+    return {
+      isAuthenticated: false,
+      userEmail: null,
+      role: null,
+      token: null,
+      preferredLanguage: "en",
+      name: null,
+      department: null,
+      title: null,
+      mobile: null,
+    };
   }
 };
 
@@ -56,6 +88,30 @@ export const useAuthStore = {
       role: result.role,
       token: result.token,
       preferredLanguage: result.preferred_language,
+      name: result.name ?? null,
+      department: result.department ?? null,
+      title: result.title ?? null,
+      mobile: result.mobile ?? null,
+    };
+    saveState();
+    await moduleAccessStore.refreshMine().catch(() => moduleAccessStore.resetToRoleDefaults(state.role));
+    return true;
+  },
+  activate: async (token: string, newPassword: string) => {
+    const result = await apiRequest<AuthResponse>("/api/auth/activate", {
+      method: "POST",
+      body: JSON.stringify({ token, newPassword }),
+    });
+    state = {
+      isAuthenticated: true,
+      userEmail: result.user_email,
+      role: result.role,
+      token: result.token,
+      preferredLanguage: result.preferred_language,
+      name: result.name ?? null,
+      department: result.department ?? null,
+      title: result.title ?? null,
+      mobile: result.mobile ?? null,
     };
     saveState();
     await moduleAccessStore.refreshMine().catch(() => moduleAccessStore.resetToRoleDefaults(state.role));
@@ -76,6 +132,10 @@ export const useAuthStore = {
       role: result.role,
       token: result.token,
       preferredLanguage: result.preferred_language,
+      name: result.name ?? null,
+      department: result.department ?? null,
+      title: result.title ?? null,
+      mobile: result.mobile ?? null,
     };
     saveState();
     await moduleAccessStore.refreshMine().catch(() => moduleAccessStore.resetToRoleDefaults(state.role));
@@ -88,6 +148,10 @@ export const useAuthStore = {
         user_email: string;
         role: "admin" | "developer" | "user";
         preferred_language: "en" | "es";
+        name: string | null;
+        department: string | null;
+        title: string | null;
+        mobile: string | null;
       }>("/api/auth/me");
       state = {
         ...state,
@@ -95,12 +159,26 @@ export const useAuthStore = {
         userEmail: me.user_email,
         role: me.role,
         preferredLanguage: me.preferred_language,
+        name: me.name ?? null,
+        department: me.department ?? null,
+        title: me.title ?? null,
+        mobile: me.mobile ?? null,
       };
       saveState();
       await moduleAccessStore.refreshMine().catch(() => moduleAccessStore.resetToRoleDefaults(state.role));
       return true;
     } catch {
-      state = { isAuthenticated: false, userEmail: null, role: null, token: null, preferredLanguage: "en" };
+      state = {
+        isAuthenticated: false,
+        userEmail: null,
+        role: null,
+        token: null,
+        preferredLanguage: "en",
+        name: null,
+        department: null,
+        title: null,
+        mobile: null,
+      };
       localStorage.removeItem(AUTH_KEY);
       moduleAccessStore.clear();
       return false;
@@ -123,7 +201,17 @@ export const useAuthStore = {
     return true;
   },
   logout: () => {
-    state = { isAuthenticated: false, userEmail: null, role: null, token: null, preferredLanguage: "en" };
+    state = {
+      isAuthenticated: false,
+      userEmail: null,
+      role: null,
+      token: null,
+      preferredLanguage: "en",
+      name: null,
+      department: null,
+      title: null,
+      mobile: null,
+    };
     localStorage.removeItem(AUTH_KEY);
     moduleAccessStore.clear();
   },

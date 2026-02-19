@@ -14,14 +14,15 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 set DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/workplatform
-set JWT_SECRET=change-me
+set JWT_SECRET=your-strong-secret-with-32-or-more-characters
+set ADMIN_BOOTSTRAP_PASSWORD=your-initial-admin-password
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Default seeded admin:
 
 - email: `admin@workplatform.local`
-- password: `123456`
+- password: value of `ADMIN_BOOTSTRAP_PASSWORD`
 
 ## Endpoint
 

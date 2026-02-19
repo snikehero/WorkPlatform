@@ -120,16 +120,23 @@ export const UserManagementPage = () => {
       notes: draft.notes.trim(),
     };
     try {
+      let savedPerson: ManagedPerson;
       if (activeId) {
-        await peopleStore.update(activeId, payload);
+        savedPerson = await peopleStore.update(activeId, payload);
         const successMessage = t("people.updated");
         setMessage(successMessage);
         showToast(successMessage, "success");
       } else {
-        await peopleStore.add(payload);
+        savedPerson = await peopleStore.add(payload);
         const successMessage = t("people.created");
         setMessage(successMessage);
         showToast(successMessage, "success");
+      }
+      if (savedPerson.activationToken) {
+        const activationLink = `${window.location.origin}/activate?token=${encodeURIComponent(savedPerson.activationToken)}`;
+        const activationMessage = t("people.activationLinkReady");
+        setMessage(`${activationMessage} ${activationLink}`);
+        showToast(activationMessage, "info");
       }
       await loadPeople();
       resetForm();

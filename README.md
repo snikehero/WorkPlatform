@@ -82,8 +82,9 @@ Set env vars:
 
 ```bash
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/workplatform
-JWT_SECRET=change-me
+JWT_SECRET=your-strong-secret-with-32-or-more-characters
 JWT_EXP_MINUTES=720
+ADMIN_BOOTSTRAP_PASSWORD=your-initial-admin-password
 ```
 
 Run:
@@ -105,6 +106,7 @@ Backend:
 - `DATABASE_URL`
 - `JWT_SECRET`
 - `JWT_EXP_MINUTES` (optional, default `720`)
+- `ADMIN_BOOTSTRAP_PASSWORD` (required only when seeding first admin user)
 
 Frontend (Vite build-time):
 - `VITE_API_BASE`
@@ -118,7 +120,7 @@ Notes:
 
 On first backend startup:
 - Email: `admin@workplatform.local`
-- Password: `123456`
+- Password: value of `ADMIN_BOOTSTRAP_PASSWORD`
 
 Change this for non-local environments.
 

@@ -8,6 +8,8 @@ export type ManagedPerson = {
   department: string;
   mobile: string;
   notes: string;
+  activationToken?: string | null;
+  activationExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };

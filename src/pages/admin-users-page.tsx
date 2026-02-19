@@ -20,6 +20,7 @@ export const AdminUsersPage = () => {
   const { showToast } = useToast();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [drafts, setDrafts] = useState<Record<string, UserDraft>>({});
+  const [activationLinks, setActivationLinks] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
@@ -107,6 +108,43 @@ export const AdminUsersPage = () => {
     }
   };
 
+  const handleGenerateActivationLink = async (userId: string) => {
+    setMessage(null);
+    try {
+      const result = await adminStore.generateActivationLink(userId);
+      const activationLink = `${window.location.origin}/activate?token=${encodeURIComponent(result.activationToken)}`;
+      setActivationLinks((current) => ({ ...current, [userId]: activationLink }));
+      const successMessage = t("admin.activationLinkGenerated");
+      setMessage(successMessage);
+      showToast(successMessage, "info");
+      await loadUsers();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : t("admin.activationLinkFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
+    }
+  };
+
+  const handleCopyActivationLink = async (userId: string) => {
+    const link = activationLinks[userId];
+    if (!link) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const temp = document.createElement("textarea");
+        temp.value = link;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand("copy");
+        document.body.removeChild(temp);
+      }
+      showToast(t("admin.activationLinkCopied"), "success");
+    } catch {
+      showToast(t("admin.activationLinkFailed"), "error");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section>
@@ -133,6 +171,7 @@ export const AdminUsersPage = () => {
                   role: user.role,
                   resetPassword: "",
                 };
+                const activationLink = activationLinks[user.id];
                 return (
                   <li key={user.id} className="rounded-md border border-border bg-card p-3">
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -200,6 +239,9 @@ export const AdminUsersPage = () => {
                         <Button type="button" variant="secondary" onClick={() => handleResetPassword(user.id)}>
                           {t("admin.resetPassword")}
                         </Button>
+                        <Button type="button" variant="secondary" onClick={() => handleGenerateActivationLink(user.id)}>
+                          {t("admin.generateResetLink")}
+                        </Button>
                         <Button type="button" variant="destructive" onClick={() => handleDeleteUser(user.id)}>
                           {t("common.delete")}
                         </Button>
@@ -209,6 +251,17 @@ export const AdminUsersPage = () => {
                     <p className="mt-2 text-xs text-muted-foreground">
                       {t("admin.createdPrefix")}: {new Date(user.createdAt).toLocaleString()}
                     </p>
+                    {activationLink ? (
+                      <div className="mt-3 space-y-2">
+                        <Label htmlFor={`activation-link-${user.id}`}>{t("admin.activationLinkLabel")}</Label>
+                        <div className="flex gap-2">
+                          <Input id={`activation-link-${user.id}`} value={activationLink} readOnly />
+                          <Button type="button" variant="secondary" onClick={() => handleCopyActivationLink(user.id)}>
+                            {t("common.copy")}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </li>
                 );
               })}

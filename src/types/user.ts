@@ -3,5 +3,6 @@ export type AppUser = {
   email: string;
   role: "admin" | "developer" | "user";
   preferredLanguage: "en" | "es";
+  mustSetPassword?: boolean;
   createdAt: string;
 };

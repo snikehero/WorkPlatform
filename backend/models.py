@@ -28,6 +28,9 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20), default=UserRole.user.value)
     preferred_language: Mapped[str] = mapped_column(String(5), default="en")
+    must_set_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    activation_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    activation_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 

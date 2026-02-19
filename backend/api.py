@@ -7,6 +7,16 @@ except ImportError:
 
 router = APIRouter()
 
+
+def issue_activation_for_user(user: User) -> tuple[str, datetime]:
+    token = generate_activation_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=60)
+    user.must_set_password = True
+    user.activation_token_hash = hash_activation_token(token)
+    user.activation_expires_at = expires_at
+    return token, expires_at
+
+
 @router.post("/api/auth/register", response_model=AuthOut)
 def register(payload: AuthRegisterIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     normalized_email = normalize_login_identity(payload.email)
@@ -37,6 +47,34 @@ def login(payload: AuthLoginIn, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == normalized_email))
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if user.must_set_password:
+        raise HTTPException(status_code=403, detail="Account activation required. Use your activation link to set a password.")
+    return AuthOut(
+        token=create_access_token(user),
+        user_email=user.email,
+        role=user.role,
+        preferred_language=user.preferred_language,
+    )
+
+
+@router.post("/api/auth/activate", response_model=AuthOut)
+def activate_account(payload: AuthActivateIn, db: Session = Depends(get_db)):
+    raw_token = (payload.token or "").strip()
+    if not raw_token:
+        raise HTTPException(status_code=400, detail="Activation token is required")
+    hashed_token = hash_activation_token(raw_token)
+    user = db.scalar(select(User).where(User.activation_token_hash == hashed_token))
+    if not user or not user.must_set_password:
+        raise HTTPException(status_code=400, detail="Invalid or already used activation token")
+    now = datetime.now(timezone.utc)
+    if not user.activation_expires_at or user.activation_expires_at < now:
+        raise HTTPException(status_code=400, detail="Activation token expired")
+    user.password_hash = hash_password(payload.newPassword)
+    user.must_set_password = False
+    user.activation_token_hash = None
+    user.activation_expires_at = None
+    db.commit()
+    db.refresh(user)
     return AuthOut(
         token=create_access_token(user),
         user_email=user.email,
@@ -46,11 +84,18 @@ def login(payload: AuthLoginIn, db: Session = Depends(get_db)):
 
 
 @router.get("/api/auth/me")
-def me(current_user: User = Depends(get_current_user)):
+def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    person = db.scalar(select(Person).where(Person.user_id == current_user.id))
+    if not person:
+        person = db.scalar(select(Person).where(Person.email == current_user.email).order_by(Person.updated_at.desc()))
     return {
         "user_email": current_user.email,
         "role": current_user.role,
         "preferred_language": current_user.preferred_language,
+        "name": person.name if person else None,
+        "department": person.job_department if person else None,
+        "title": person.title if person else None,
+        "mobile": person.mobile if person else None,
     }
 
 
@@ -87,13 +132,14 @@ def list_users(_: User = Depends(require_admin_access), db: Session = Depends(ge
             email=user.email,
             role=user.role,
             preferredLanguage=user.preferred_language,
+            mustSetPassword=user.must_set_password,
             createdAt=to_iso(user.created_at),
         )
         for user in users
     ]
 
 
-@router.post("/api/admin/users", response_model=AdminUserOut)
+@router.post("/api/admin/users", response_model=AdminCreateUserOut)
 def create_user(payload: AdminCreateUserIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     normalized_email = normalize_login_identity(payload.email)
     existing = db.scalar(select(User).where(User.email == normalized_email))
@@ -102,17 +148,21 @@ def create_user(payload: AdminCreateUserIn, _: User = Depends(require_admin_acce
 
     user = User(
         email=normalized_email,
-        password_hash=hash_password(payload.password),
+        password_hash=hash_password(generate_activation_token()),
         role=payload.role.value,
     )
+    activation_token, activation_expires_at = issue_activation_for_user(user)
     db.add(user)
     db.commit()
     db.refresh(user)
-    return AdminUserOut(
+    return AdminCreateUserOut(
         id=user.id,
         email=user.email,
         role=user.role,
         preferredLanguage=user.preferred_language,
+        mustSetPassword=user.must_set_password,
+        activationToken=activation_token,
+        activationExpiresAt=to_iso(activation_expires_at),
         createdAt=to_iso(user.created_at),
     )
 
@@ -137,6 +187,7 @@ def update_user(user_id: str, payload: AdminUpdateUserIn, current_admin: User = 
         email=user.email,
         role=user.role,
         preferredLanguage=user.preferred_language,
+        mustSetPassword=user.must_set_password,
         createdAt=to_iso(user.created_at),
     )
 
@@ -147,8 +198,26 @@ def reset_user_password(user_id: str, payload: AdminResetPasswordIn, _: User = D
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.password_hash = hash_password(payload.password)
+    user.must_set_password = False
+    user.activation_token_hash = None
+    user.activation_expires_at = None
     db.commit()
     return {"ok": True}
+
+
+@router.post("/api/admin/users/{user_id}/activation-link", response_model=AdminUserActivationOut)
+def generate_user_activation_link(user_id: str, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    activation_token, activation_expires_at = issue_activation_for_user(user)
+    db.commit()
+    return AdminUserActivationOut(
+        userId=user.id,
+        email=user.email,
+        activationToken=activation_token,
+        activationExpiresAt=to_iso(activation_expires_at),
+    )
 
 
 @router.delete("/api/admin/users/{user_id}")
@@ -219,16 +288,23 @@ def create_person(payload: PersonIn, _: User = Depends(require_admin_access), db
     user_email = resolve_person_user_email(payload.email, name, db)
     linked_user = User(
         email=user_email,
-        password_hash=hash_password("12345"),
+        password_hash=hash_password(generate_activation_token()),
         role=payload.role.value,
         preferred_language=item.lang if item.lang in ("en", "es") else "en",
     )
+    activation_token, activation_expires_at = issue_activation_for_user(linked_user)
     db.add(linked_user)
     db.flush()
     item.user_id = linked_user.id
     db.commit()
     db.refresh(item)
-    return person_to_out(item)
+    person_out = person_to_out(item)
+    return person_out.model_copy(
+        update={
+            "activationToken": activation_token,
+            "activationExpiresAt": to_iso(activation_expires_at),
+        }
+    )
 
 
 @router.patch("/api/admin/people/{person_id}", response_model=PersonOut)
@@ -247,6 +323,8 @@ def update_person(person_id: str, payload: PersonIn, _: User = Depends(require_a
     item.job_department = department
     item.mobile = payload.mobile.strip()
     item.notes = payload.notes.strip()
+    activation_token: str | None = None
+    activation_expires_at: datetime | None = None
     if item.user_id:
         linked_user = db.get(User, item.user_id)
         if linked_user:
@@ -256,17 +334,26 @@ def update_person(person_id: str, payload: PersonIn, _: User = Depends(require_a
     else:
         linked_user = User(
             email=resolve_person_user_email(payload.email, name, db),
-            password_hash=hash_password("12345"),
+            password_hash=hash_password(generate_activation_token()),
             role=payload.role.value,
             preferred_language=item.lang if item.lang in ("en", "es") else "en",
         )
+        activation_token, activation_expires_at = issue_activation_for_user(linked_user)
         db.add(linked_user)
         db.flush()
         item.user_id = linked_user.id
     item.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(item)
-    return person_to_out(item)
+    person_out = person_to_out(item)
+    if activation_token and activation_expires_at:
+        return person_out.model_copy(
+            update={
+                "activationToken": activation_token,
+                "activationExpiresAt": to_iso(activation_expires_at),
+            }
+        )
+    return person_out
 
 
 @router.delete("/api/admin/people/{person_id}")

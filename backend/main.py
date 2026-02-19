@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
@@ -23,6 +25,11 @@ def on_startup():
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_language VARCHAR(5) DEFAULT 'en'"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS must_set_password BOOLEAN DEFAULT FALSE"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS activation_token_hash VARCHAR(128)"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS activation_expires_at TIMESTAMPTZ"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_activation_token_hash ON users (activation_token_hash)"))
+        conn.execute(text("UPDATE users SET must_set_password = FALSE WHERE must_set_password IS NULL"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'help'"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS process_notes TEXT DEFAULT ''"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '[]'"))
@@ -70,11 +77,15 @@ def on_startup():
     with SessionLocal() as db:
         existing = db.scalar(select(User).where(User.email == "admin@workplatform.local"))
         if not existing:
+            bootstrap_password = os.getenv("ADMIN_BOOTSTRAP_PASSWORD", "").strip()
+            if not bootstrap_password:
+                raise RuntimeError("ADMIN_BOOTSTRAP_PASSWORD is required for initial admin bootstrap")
             admin = User(
                 email="admin@workplatform.local",
-                password_hash=hash_password("123456"),
+                password_hash=hash_password(bootstrap_password),
                 role=UserRole.admin.value,
                 preferred_language="en",
+                must_set_password=False,
             )
             db.add(admin)
             db.flush()
