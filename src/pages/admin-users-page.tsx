@@ -4,8 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { LoadingState } from "@/components/ui/page-state";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/i18n/i18n";
+import { loadSavedView, saveSavedView } from "@/lib/saved-views";
 import { adminStore } from "@/stores/admin-store";
 import type { AppUser } from "@/types/user";
 
@@ -15,38 +17,93 @@ type UserDraft = {
   resetPassword: string;
 };
 
+type SortBy = "createdAt" | "email" | "role";
+type SortDir = "asc" | "desc";
+
+const SAVED_VIEW_ID = "admin-users";
+const DEFAULT_PAGE_SIZE = 20;
+
+type SavedView = {
+  search: string;
+  roleFilter: "" | "admin" | "developer" | "user";
+  sortBy: SortBy;
+  sortDir: SortDir;
+  pageSize: number;
+};
+
+const DEFAULT_VIEW: SavedView = {
+  search: "",
+  roleFilter: "",
+  sortBy: "createdAt",
+  sortDir: "desc",
+  pageSize: DEFAULT_PAGE_SIZE,
+};
+
 export const AdminUsersPage = () => {
   const { t } = useI18n();
   const { showToast } = useToast();
+  const savedView = loadSavedView<SavedView>(SAVED_VIEW_ID, DEFAULT_VIEW);
+
   const [users, setUsers] = useState<AppUser[]>([]);
   const [drafts, setDrafts] = useState<Record<string, UserDraft>>({});
   const [activationLinks, setActivationLinks] = useState<Record<string, string>>({});
+  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(savedView.search);
+  const [roleFilter, setRoleFilter] = useState<SavedView["roleFilter"]>(savedView.roleFilter);
+  const [sortBy, setSortBy] = useState<SortBy>(savedView.sortBy);
+  const [sortDir, setSortDir] = useState<SortDir>(savedView.sortDir);
+  const [pageSize, setPageSize] = useState(savedView.pageSize);
 
   const loadUsers = async () => {
-    const data = await adminStore.allUsers();
-    setUsers(data);
-    setDrafts((current) => {
-      const next = { ...current };
-      for (const user of data) {
-        if (!next[user.id]) {
-          next[user.id] = { email: user.email, role: user.role, resetPassword: "" };
+    setIsLoading(true);
+    try {
+      const data = await adminStore.listUsers({
+        search,
+        role: roleFilter,
+        sortBy,
+        sortDir,
+        page,
+        pageSize,
+      });
+      setUsers(data.items);
+      setTotal(data.total);
+      setSelectedIds({});
+      setDrafts((current) => {
+        const next = { ...current };
+        for (const user of data.items) {
+          if (!next[user.id]) {
+            next[user.id] = { email: user.email, role: user.role, resetPassword: "" };
+          }
         }
-      }
-      return next;
-    });
+        return next;
+      });
+    } catch (error) {
+      setUsers([]);
+      setTotal(0);
+      const errorMessage = error instanceof Error ? error.message : t("admin.usersLoadFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadUsers().catch(() => setUsers([]));
-  }, []);
+    saveSavedView(SAVED_VIEW_ID, { search, roleFilter, sortBy, sortDir, pageSize });
+  }, [search, roleFilter, sortBy, sortDir, pageSize]);
 
-  const filteredUsers = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return users;
-    return users.filter((user) => [user.email, user.role].join(" ").toLowerCase().includes(term));
-  }, [users, search]);
+  useEffect(() => {
+    loadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, roleFilter, sortBy, sortDir, page, pageSize]);
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
+  const selectedUserIds = useMemo(() => users.filter((user) => selectedIds[user.id]).map((user) => user.id), [selectedIds, users]);
+  const allVisibleSelected = users.length > 0 && selectedUserIds.length === users.length;
 
   const handleUpdateUser = async (userId: string) => {
     const draft = drafts[userId];
@@ -67,15 +124,22 @@ export const AdminUsersPage = () => {
 
   const handleResetPassword = async (userId: string) => {
     const draft = drafts[userId];
-    if (!draft?.resetPassword.trim()) {
+    const nextPassword = draft?.resetPassword.trim() ?? "";
+    if (!nextPassword) {
       const errorMessage = t("admin.resetEnterPassword");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
+      return;
+    }
+    if (nextPassword.length < 6) {
+      const errorMessage = t("admin.resetMinLength");
       setMessage(errorMessage);
       showToast(errorMessage, "error");
       return;
     }
     setMessage(null);
     try {
-      await adminStore.resetPassword(userId, draft.resetPassword.trim());
+      await adminStore.resetPassword(userId, nextPassword);
       setDrafts((current) => ({
         ...current,
         [userId]: {
@@ -103,6 +167,27 @@ export const AdminUsersPage = () => {
       await loadUsers();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t("admin.deleteFailed");
+      setMessage(errorMessage);
+      showToast(errorMessage, "error");
+    }
+  };
+
+  const handleBulkDeleteUsers = async () => {
+    if (selectedUserIds.length === 0) return;
+    if (!window.confirm(t("admin.bulkDeleteConfirm", { count: String(selectedUserIds.length) }))) return;
+    setMessage(null);
+    try {
+      const result = await adminStore.bulkDeleteUsers(selectedUserIds);
+      const successMessage = t("admin.bulkDeleted", { count: String(result.deleted) });
+      setMessage(successMessage);
+      showToast(successMessage, "success");
+      if (page > 1 && users.length === result.deleted) {
+        setPage((current) => Math.max(1, current - 1));
+      } else {
+        await loadUsers();
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : t("admin.bulkDeleteFailed");
       setMessage(errorMessage);
       showToast(errorMessage, "error");
     }
@@ -158,14 +243,91 @@ export const AdminUsersPage = () => {
           <CardDescription>{t("admin.usersSubtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-4">
-            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("admin.searchPlaceholder")} />
+          <div className="mb-4 grid gap-3 md:grid-cols-6">
+            <Input
+              className="md:col-span-2"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder={t("admin.searchPlaceholder")}
+            />
+            <Select
+              value={roleFilter}
+              onChange={(event) => {
+                setRoleFilter(event.target.value as SavedView["roleFilter"]);
+                setPage(1);
+              }}
+            >
+              <option value="">{t("admin.anyRole")}</option>
+              <option value="user">{t("common.user")}</option>
+              <option value="developer">{t("common.developer")}</option>
+              <option value="admin">{t("common.admin")}</option>
+            </Select>
+            <Select
+              value={sortBy}
+              onChange={(event) => {
+                setSortBy(event.target.value as SortBy);
+                setPage(1);
+              }}
+            >
+              <option value="createdAt">{t("admin.sortCreatedAt")}</option>
+              <option value="email">{t("admin.sortEmail")}</option>
+              <option value="role">{t("admin.sortRole")}</option>
+            </Select>
+            <Select
+              value={sortDir}
+              onChange={(event) => {
+                setSortDir(event.target.value as SortDir);
+                setPage(1);
+              }}
+            >
+              <option value="desc">{t("admin.sortDesc")}</option>
+              <option value="asc">{t("admin.sortAsc")}</option>
+            </Select>
+            <Select
+              value={String(pageSize)}
+              onChange={(event) => {
+                setPageSize(Number(event.target.value));
+                setPage(1);
+              }}
+            >
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </Select>
           </div>
-          {filteredUsers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("admin.noUsers")}</p>
-          ) : (
+
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setSelectedIds((current) => {
+                    const next = { ...current };
+                    for (const user of users) {
+                      if (checked) next[user.id] = true;
+                      else delete next[user.id];
+                    }
+                    return next;
+                  });
+                }}
+              />
+              {t("admin.selectAllVisible")}
+            </label>
+            <Button type="button" variant="destructive" onClick={handleBulkDeleteUsers} disabled={selectedUserIds.length === 0}>
+              {t("admin.bulkDeleteUsers", { count: String(selectedUserIds.length) })}
+            </Button>
+          </div>
+
+          {isLoading ? <LoadingState /> : null}
+          {!isLoading && users.length === 0 ? <p className="text-sm text-muted-foreground">{t("admin.noUsers")}</p> : null}
+          {!isLoading ? (
             <ul className="space-y-3">
-              {filteredUsers.map((user) => {
+              {users.map((user) => {
                 const draft = drafts[user.id] ?? {
                   email: user.email,
                   role: user.role,
@@ -174,6 +336,22 @@ export const AdminUsersPage = () => {
                 const activationLink = activationLinks[user.id];
                 return (
                   <li key={user.id} className="rounded-md border border-border bg-card p-3">
+                    <div className="mb-3">
+                      <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedIds[user.id])}
+                          onChange={(event) =>
+                            setSelectedIds((current) => ({
+                              ...current,
+                              [user.id]: event.target.checked,
+                            }))
+                          }
+                        />
+                        {t("admin.selectUser")}
+                      </label>
+                    </div>
+
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-2">
                         <Label htmlFor={`user-email-${user.id}`}>{t("admin.emailOrUsername")}</Label>
@@ -266,7 +444,25 @@ export const AdminUsersPage = () => {
                 );
               })}
             </ul>
-          )}
+          ) : null}
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              {t("admin.paginationSummary", { total: String(total), page: String(page), totalPages: String(totalPages) })}
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>
+                {t("common.previous")}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                disabled={page >= totalPages}
+              >
+                {t("common.next")}
+              </Button>
+            </div>
+          </div>
           {message ? <p className="mt-3 text-sm text-muted-foreground">{message}</p> : null}
         </CardContent>
       </Card>

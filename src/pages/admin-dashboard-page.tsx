@@ -57,6 +57,21 @@ export const AdminDashboardPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("admin.auditPageTitle")}</CardTitle>
+          <CardDescription>{t("admin.auditPageSubtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">{t("admin.auditPageHint")}</p>
+            <Link to="/admin/audit">
+              <Button type="button" variant="secondary">{t("admin.openAuditPage")}</Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

@@ -1,5 +1,7 @@
 export type ManagedPerson = {
   id: string;
+  userId?: string | null;
+  userEmail?: string | null;
   legacyId: number | null;
   name: string;
   email: string;
@@ -12,4 +14,11 @@ export type ManagedPerson = {
   activationExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PeopleListResponse = {
+  items: ManagedPerson[];
+  total: number;
+  page: number;
+  pageSize: number;
 };

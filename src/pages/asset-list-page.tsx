@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
+import { loadSavedView, saveSavedView } from "@/lib/saved-views";
 import { assetStore } from "@/stores/asset-store";
 import type { Asset } from "@/types/asset";
 import { useI18n } from "@/i18n/i18n";
@@ -25,6 +26,32 @@ type SortKey =
   | "status"
   | "user"
   | "condition";
+
+type SavedView = {
+  search: string;
+  locationFilter: string;
+  categoryFilter: string;
+  manufacturerFilter: string;
+  supplierFilter: string;
+  statusFilter: string;
+  conditionFilter: string;
+  sortKey: SortKey;
+  sortDirection: "asc" | "desc";
+};
+
+const SAVED_VIEW_ID = "assets-list";
+
+const DEFAULT_VIEW: SavedView = {
+  search: "",
+  locationFilter: "",
+  categoryFilter: "",
+  manufacturerFilter: "",
+  supplierFilter: "",
+  statusFilter: "",
+  conditionFilter: "",
+  sortKey: "assetTag",
+  sortDirection: "asc",
+};
 
 const CATEGORY_BADGE_CLASSES: Record<string, string> = {
   "dd externo": "border-amber-300/40 bg-amber-400/10 text-amber-700 dark:text-amber-300",
@@ -56,18 +83,20 @@ export const AssetListPage = () => {
   const { t } = useI18n();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const savedView = loadSavedView<SavedView>(SAVED_VIEW_ID, DEFAULT_VIEW);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [locationFilter, setLocationFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [manufacturerFilter, setManufacturerFilter] = useState("");
-  const [supplierFilter, setSupplierFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [conditionFilter, setConditionFilter] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("assetTag");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [search, setSearch] = useState(savedView.search);
+  const [locationFilter, setLocationFilter] = useState(savedView.locationFilter);
+  const [categoryFilter, setCategoryFilter] = useState(savedView.categoryFilter);
+  const [manufacturerFilter, setManufacturerFilter] = useState(savedView.manufacturerFilter);
+  const [supplierFilter, setSupplierFilter] = useState(savedView.supplierFilter);
+  const [statusFilter, setStatusFilter] = useState(savedView.statusFilter);
+  const [conditionFilter, setConditionFilter] = useState(savedView.conditionFilter);
+  const [sortKey, setSortKey] = useState<SortKey>(savedView.sortKey);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(savedView.sortDirection);
+  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
 
   const loadAssets = async () => {
     setLoadError(null);
@@ -87,6 +116,20 @@ export const AssetListPage = () => {
     loadAssets();
   }, []);
 
+  useEffect(() => {
+    saveSavedView(SAVED_VIEW_ID, {
+      search,
+      locationFilter,
+      categoryFilter,
+      manufacturerFilter,
+      supplierFilter,
+      statusFilter,
+      conditionFilter,
+      sortKey,
+      sortDirection,
+    });
+  }, [search, locationFilter, categoryFilter, manufacturerFilter, supplierFilter, statusFilter, conditionFilter, sortKey, sortDirection]);
+
   const handleDelete = async (assetId: string) => {
     try {
       await assetStore.remove(assetId);
@@ -94,6 +137,19 @@ export const AssetListPage = () => {
       await loadAssets();
     } catch (error) {
       showToast(error instanceof Error ? error.message : t("assets.empty"), "error");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (visibleSelectedIds.length === 0) return;
+    if (!window.confirm(t("assets.bulkDeleteConfirm", { count: String(visibleSelectedIds.length) }))) return;
+    try {
+      const result = await assetStore.bulkRemove(visibleSelectedIds);
+      showToast(t("assets.bulkDeleted", { count: String(result.deleted) }), "success");
+      setSelectedIds({});
+      await loadAssets();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : t("assets.bulkDeleteFailed"), "error");
     }
   };
 
@@ -186,6 +242,13 @@ export const AssetListPage = () => {
     sortDirection,
   ]);
 
+  const visibleSelectedIds = useMemo(
+    () => filteredAndSortedAssets.filter((item) => selectedIds[item.id]).map((item) => item.id),
+    [filteredAndSortedAssets, selectedIds]
+  );
+
+  const allVisibleSelected = filteredAndSortedAssets.length > 0 && visibleSelectedIds.length === filteredAndSortedAssets.length;
+
   const setSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
@@ -208,6 +271,7 @@ export const AssetListPage = () => {
     setSupplierFilter("");
     setStatusFilter("");
     setConditionFilter("");
+    setSelectedIds({});
   };
 
   return (
@@ -279,6 +343,9 @@ export const AssetListPage = () => {
             <Button type="button" variant="secondary" onClick={clearFilters}>
               {t("common.clear")}
             </Button>
+            <Button type="button" variant="destructive" onClick={handleBulkDelete} disabled={visibleSelectedIds.length === 0}>
+              {t("assets.bulkDeleteAssets", { count: String(visibleSelectedIds.length) })}
+            </Button>
           </div>
           {isLoading ? <LoadingState /> : null}
           {!isLoading && loadError ? <ErrorState label={loadError} onRetry={loadAssets} /> : null}
@@ -287,6 +354,23 @@ export const AssetListPage = () => {
             <DataTableShell minWidthClass="min-w-[1200px]">
               <thead className="text-muted-foreground">
                 <tr>
+                  <th className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setSelectedIds((current) => {
+                          const next = { ...current };
+                          for (const item of filteredAndSortedAssets) {
+                            if (checked) next[item.id] = true;
+                            else delete next[item.id];
+                          }
+                          return next;
+                        });
+                      }}
+                    />
+                  </th>
                   <th className="px-3 py-2">
                     <button type="button" className="inline-flex items-center gap-1" onClick={() => setSort("assetTag")}>
                       {t("assets.assetTag")} {renderSortIcon("assetTag")}
@@ -348,6 +432,18 @@ export const AssetListPage = () => {
               <tbody>
                 {filteredAndSortedAssets.map((item) => (
                   <tr key={item.id} className="border-t border-border align-top">
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedIds[item.id])}
+                        onChange={(event) =>
+                          setSelectedIds((current) => ({
+                            ...current,
+                            [item.id]: event.target.checked,
+                          }))
+                        }
+                      />
+                    </td>
                     <td className="px-3 py-2">{item.assetTag}</td>
                     <td className="px-3 py-2">{item.qrCode || "-"}</td>
                     <td className="px-3 py-2">{item.location || "-"}</td>

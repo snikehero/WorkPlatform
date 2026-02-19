@@ -23,6 +23,9 @@ const getToken = () => {
   }
 };
 
+export const getAuthToken = () => getToken();
+export const getApiBase = () => API_BASE;
+
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const headers = new Headers(init?.headers ?? {});
@@ -41,12 +44,24 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
 
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
+    let requestId = response.headers.get("x-request-id") ?? undefined;
     try {
-      const payload = (await response.json()) as { detail?: string };
-      if (payload.detail) message = payload.detail;
+      const payload = (await response.json()) as {
+        detail?: string;
+        error?: { message?: string; requestId?: string };
+      };
+      if (payload.error?.message) {
+        message = payload.error.message;
+      } else if (payload.detail) {
+        message = payload.detail;
+      }
+      requestId = payload.error?.requestId ?? requestId;
     } catch {
       const text = await response.text();
       if (text) message = text;
+    }
+    if (requestId) {
+      message = `${message} (Request ID: ${requestId})`;
     }
     throw new Error(message);
   }

@@ -6,3 +6,10 @@ export type AppUser = {
   mustSetPassword?: boolean;
   createdAt: string;
 };
+
+export type AdminUserListResponse = {
+  items: AppUser[];
+  total: number;
+  page: number;
+  pageSize: number;
+};

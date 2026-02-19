@@ -31,6 +31,7 @@ import { getDefaultLandingPath } from "@/lib/module-access";
 import type { AppModule } from "@/types/module-access";
 import { AdminModuleAccessPage } from "@/pages/admin-module-access-page";
 import { ActivateAccountPage } from "@/pages/activate-account-page";
+import { AdminAuditPage } from "@/pages/admin-audit-page";
 
 const getLandingPath = () => {
   const auth = useAuthStore.getState();
@@ -384,6 +385,16 @@ export const router = createBrowserRouter([
       <AdminRoute>
         <AppLayout>
           <AdminModuleAccessPage />
+        </AppLayout>
+      </AdminRoute>
+    ),
+  },
+  {
+    path: "/admin/audit",
+    element: (
+      <AdminRoute>
+        <AppLayout>
+          <AdminAuditPage />
         </AppLayout>
       </AdminRoute>
     ),

@@ -1,4 +1,9 @@
-from fastapi import APIRouter
+import csv
+import io
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Query, Request
+from sqlalchemy import and_, func, or_
 
 try:
     from .core import *  # noqa: F403
@@ -15,6 +20,90 @@ def issue_activation_for_user(user: User) -> tuple[str, datetime]:
     user.activation_token_hash = hash_activation_token(token)
     user.activation_expires_at = expires_at
     return token, expires_at
+
+
+def parse_iso_datetime(value: str, field_name: str) -> datetime:
+    raw = (value or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail=f"{field_name} is required")
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"{field_name} must be ISO-8601 datetime") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def encode_audit_cursor(created_at: datetime, item_id: str) -> str:
+    return f"{to_iso(created_at)}|{item_id}"
+
+
+def decode_audit_cursor(cursor: str) -> tuple[datetime, str]:
+    value = (cursor or "").strip()
+    if "|" not in value:
+        raise HTTPException(status_code=400, detail="cursor is invalid")
+    date_part, item_id = value.split("|", 1)
+    parsed = parse_iso_datetime(date_part, "cursor")
+    if not item_id:
+        raise HTTPException(status_code=400, detail="cursor is invalid")
+    return parsed, item_id
+
+
+def apply_audit_filters(
+    stmt,
+    *,
+    from_dt: datetime | None,
+    to_dt: datetime | None,
+    actor_email: str | None,
+    action: str | None,
+    target_type: str | None,
+    target_id: str | None,
+    status: str | None,
+):
+    if from_dt:
+        stmt = stmt.where(AuditLog.created_at >= from_dt)
+    if to_dt:
+        stmt = stmt.where(AuditLog.created_at <= to_dt)
+    if actor_email:
+        stmt = stmt.where(AuditLog.actor_email.ilike(f"%{actor_email.strip()}%"))
+    if action:
+        stmt = stmt.where(AuditLog.action == action.strip().lower())
+    if target_type:
+        stmt = stmt.where(AuditLog.target_type == target_type.strip().lower())
+    if target_id:
+        stmt = stmt.where(AuditLog.target_id == target_id.strip())
+    if status:
+        normalized_status = status.strip().lower()
+        if normalized_status not in ("success", "failure"):
+            raise HTTPException(status_code=400, detail="status must be success|failure")
+        stmt = stmt.where(AuditLog.status == normalized_status)
+    return stmt
+
+
+def parse_page_args(page: int, page_size: int) -> tuple[int, int, int]:
+    safe_page = max(page, 1)
+    safe_page_size = min(max(page_size, 1), 100)
+    offset = (safe_page - 1) * safe_page_size
+    return safe_page, safe_page_size, offset
+
+
+def parse_sort_direction(sort_dir: str) -> str:
+    value = (sort_dir or "asc").strip().lower()
+    if value not in ("asc", "desc"):
+        raise HTTPException(status_code=400, detail="sortDir must be asc|desc")
+    return value
+
+
+def user_to_out(user: User) -> AdminUserOut:
+    return AdminUserOut(
+        id=user.id,
+        email=user.email,
+        role=user.role,
+        preferredLanguage=user.preferred_language,
+        mustSetPassword=user.must_set_password,
+        createdAt=to_iso(user.created_at),
+    )
 
 
 @router.post("/api/auth/register", response_model=AuthOut)
@@ -58,16 +147,51 @@ def login(payload: AuthLoginIn, db: Session = Depends(get_db)):
 
 
 @router.post("/api/auth/activate", response_model=AuthOut)
-def activate_account(payload: AuthActivateIn, db: Session = Depends(get_db)):
+def activate_account(payload: AuthActivateIn, request: Request, db: Session = Depends(get_db)):
+    request_id = get_request_id(request)
+    ip_address = get_request_ip(request)
     raw_token = (payload.token or "").strip()
     if not raw_token:
+        write_audit_log(
+            db,
+            actor=None,
+            action="auth.activate",
+            target_type="auth",
+            target_id=None,
+            status="failure",
+            payload={"reason": "missing_token"},
+            request_id=request_id,
+            ip_address=ip_address,
+        )
         raise HTTPException(status_code=400, detail="Activation token is required")
     hashed_token = hash_activation_token(raw_token)
     user = db.scalar(select(User).where(User.activation_token_hash == hashed_token))
     if not user or not user.must_set_password:
+        write_audit_log(
+            db,
+            actor=None,
+            action="auth.activate",
+            target_type="auth",
+            target_id=None,
+            status="failure",
+            payload={"reason": "invalid_or_used_token"},
+            request_id=request_id,
+            ip_address=ip_address,
+        )
         raise HTTPException(status_code=400, detail="Invalid or already used activation token")
     now = datetime.now(timezone.utc)
     if not user.activation_expires_at or user.activation_expires_at < now:
+        write_audit_log(
+            db,
+            actor=user,
+            action="auth.activate",
+            target_type="auth",
+            target_id=user.id,
+            status="failure",
+            payload={"reason": "expired_token"},
+            request_id=request_id,
+            ip_address=ip_address,
+        )
         raise HTTPException(status_code=400, detail="Activation token expired")
     user.password_hash = hash_password(payload.newPassword)
     user.must_set_password = False
@@ -75,6 +199,17 @@ def activate_account(payload: AuthActivateIn, db: Session = Depends(get_db)):
     user.activation_expires_at = None
     db.commit()
     db.refresh(user)
+    write_audit_log(
+        db,
+        actor=user,
+        action="auth.activate",
+        target_type="auth",
+        target_id=user.id,
+        status="success",
+        payload={"result": "password_set"},
+        request_id=request_id,
+        ip_address=ip_address,
+    )
     return AuthOut(
         token=create_access_token(user),
         user_email=user.email,
@@ -115,32 +250,92 @@ def update_preferences(payload: LanguagePreferenceIn, current_user: User = Depen
 
 
 @router.post("/api/auth/change-password")
-def change_password(payload: ChangePasswordIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def change_password(payload: ChangePasswordIn, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    request_id = get_request_id(request)
+    ip_address = get_request_ip(request)
     if not verify_password(payload.currentPassword, current_user.password_hash):
+        write_audit_log(
+            db,
+            actor=current_user,
+            action="auth.change_password",
+            target_type="auth",
+            target_id=current_user.id,
+            status="failure",
+            payload={"reason": "incorrect_current_password"},
+            request_id=request_id,
+            ip_address=ip_address,
+        )
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     current_user.password_hash = hash_password(payload.newPassword)
     db.commit()
+    write_audit_log(
+        db,
+        actor=current_user,
+        action="auth.change_password",
+        target_type="auth",
+        target_id=current_user.id,
+        status="success",
+        payload={"result": "password_updated"},
+        request_id=request_id,
+        ip_address=ip_address,
+    )
     return {"ok": True}
 
 
 @router.get("/api/admin/users", response_model=list[AdminUserOut])
 def list_users(_: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     users = db.scalars(select(User).order_by(User.created_at.desc())).all()
-    return [
-        AdminUserOut(
-            id=user.id,
-            email=user.email,
-            role=user.role,
-            preferredLanguage=user.preferred_language,
-            mustSetPassword=user.must_set_password,
-            createdAt=to_iso(user.created_at),
-        )
-        for user in users
-    ]
+    return [user_to_out(user) for user in users]
+
+
+@router.get("/api/admin/users/list", response_model=AdminUserListOut)
+def list_users_paginated(
+    search: str | None = Query(default=None),
+    role: str | None = Query(default=None),
+    sortBy: str = Query(default="createdAt"),
+    sortDir: str = Query(default="desc"),
+    page: int = Query(default=1),
+    pageSize: int = Query(default=20),
+    _: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    safe_page, safe_page_size, offset = parse_page_args(page, pageSize)
+    direction = parse_sort_direction(sortDir)
+    sort_columns = {
+        "createdAt": User.created_at,
+        "email": User.email,
+        "role": User.role,
+    }
+    sort_column = sort_columns.get(sortBy)
+    if sort_column is None:
+        raise HTTPException(status_code=400, detail="sortBy must be createdAt|email|role")
+    conditions: list[object] = []
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        conditions.append(or_(User.email.ilike(term), User.role.ilike(term)))
+    if role and role.strip():
+        conditions.append(User.role == normalize_role_name(role))
+    users_stmt = select(User)
+    total_stmt = select(func.count()).select_from(User)
+    if conditions:
+        users_stmt = users_stmt.where(*conditions)
+        total_stmt = total_stmt.where(*conditions)
+    if direction == "asc":
+        users_stmt = users_stmt.order_by(sort_column.asc(), User.id.asc())
+    else:
+        users_stmt = users_stmt.order_by(sort_column.desc(), User.id.desc())
+    users = db.scalars(users_stmt.offset(offset).limit(safe_page_size)).all()
+    total = int(db.scalar(total_stmt) or 0)
+    return AdminUserListOut(
+        items=[user_to_out(user) for user in users],
+        total=total,
+        page=safe_page,
+        pageSize=safe_page_size,
+    )
 
 
 @router.post("/api/admin/users", response_model=AdminCreateUserOut)
-def create_user(payload: AdminCreateUserIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+def create_user(payload: AdminCreateUserIn, request: Request, current_admin: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     normalized_email = normalize_login_identity(payload.email)
     existing = db.scalar(select(User).where(User.email == normalized_email))
     if existing:
@@ -155,6 +350,17 @@ def create_user(payload: AdminCreateUserIn, _: User = Depends(require_admin_acce
     db.add(user)
     db.commit()
     db.refresh(user)
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.user.create",
+        target_type="user",
+        target_id=user.id,
+        status="success",
+        payload={"email": user.email, "role": user.role, "mustSetPassword": user.must_set_password},
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
     return AdminCreateUserOut(
         id=user.id,
         email=user.email,
@@ -168,7 +374,13 @@ def create_user(payload: AdminCreateUserIn, _: User = Depends(require_admin_acce
 
 
 @router.patch("/api/admin/users/{user_id}", response_model=AdminUserOut)
-def update_user(user_id: str, payload: AdminUpdateUserIn, current_admin: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+def update_user(
+    user_id: str,
+    payload: AdminUpdateUserIn,
+    request: Request,
+    current_admin: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -176,12 +388,25 @@ def update_user(user_id: str, payload: AdminUpdateUserIn, current_admin: User = 
     existing = db.scalar(select(User).where(User.email == normalized_email, User.id != user_id))
     if existing:
         raise HTTPException(status_code=409, detail="Email already in use")
+    before = {"email": user.email, "role": user.role}
     user.email = normalized_email
     if user.id == current_admin.id and payload.role != UserRole.admin:
         raise HTTPException(status_code=400, detail="Cannot downgrade your own admin role")
     user.role = payload.role.value
     db.commit()
     db.refresh(user)
+    changed = diff_fields(before, {"email": user.email, "role": user.role})
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.user.update",
+        target_type="user",
+        target_id=user.id,
+        status="success",
+        payload={"changed": changed},
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
     return AdminUserOut(
         id=user.id,
         email=user.email,
@@ -193,25 +418,61 @@ def update_user(user_id: str, payload: AdminUpdateUserIn, current_admin: User = 
 
 
 @router.post("/api/admin/users/{user_id}/reset-password")
-def reset_user_password(user_id: str, payload: AdminResetPasswordIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+def reset_user_password(
+    user_id: str,
+    payload: AdminResetPasswordIn,
+    request: Request,
+    current_admin: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user.password_hash = hash_password(payload.password)
+    next_password = (payload.password or "").strip()
+    if len(next_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    user.password_hash = hash_password(next_password)
     user.must_set_password = False
     user.activation_token_hash = None
     user.activation_expires_at = None
     db.commit()
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.user.reset_password",
+        target_type="user",
+        target_id=user.id,
+        status="success",
+        payload={"email": user.email},
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
     return {"ok": True}
 
 
 @router.post("/api/admin/users/{user_id}/activation-link", response_model=AdminUserActivationOut)
-def generate_user_activation_link(user_id: str, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+def generate_user_activation_link(
+    user_id: str,
+    request: Request,
+    current_admin: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     activation_token, activation_expires_at = issue_activation_for_user(user)
     db.commit()
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.user.generate_activation_link",
+        target_type="user",
+        target_id=user.id,
+        status="success",
+        payload={"email": user.email, "tokenIssued": True, "activationExpiresAt": to_iso(activation_expires_at)},
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
     return AdminUserActivationOut(
         userId=user.id,
         email=user.email,
@@ -221,21 +482,127 @@ def generate_user_activation_link(user_id: str, _: User = Depends(require_admin_
 
 
 @router.delete("/api/admin/users/{user_id}")
-def delete_user(user_id: str, current_admin: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+def delete_user(user_id: str, request: Request, current_admin: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.id == current_admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
+    deleted_payload = {"email": user.email, "role": user.role}
     db.delete(user)
     db.commit()
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.user.delete",
+        target_type="user",
+        target_id=user_id,
+        status="success",
+        payload=deleted_payload,
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
     return {"ok": True}
+
+
+@router.post("/api/admin/users/bulk-delete", response_model=BulkDeleteOut)
+def bulk_delete_users(
+    payload: BulkIdsIn,
+    request: Request,
+    current_admin: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    requested_ids = [value for value in payload.ids if value]
+    if not requested_ids:
+        return BulkDeleteOut(deleted=0)
+    if current_admin.id in requested_ids:
+        raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
+    unique_ids = list(dict.fromkeys(requested_ids))
+    users = db.scalars(select(User).where(User.id.in_(unique_ids))).all()
+    deleted_ids: list[str] = []
+    for item in users:
+        deleted_ids.append(item.id)
+        db.delete(item)
+    db.commit()
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.user.bulk_delete",
+        target_type="user",
+        target_id=None,
+        status="success",
+        payload={"requested": len(unique_ids), "deleted": len(deleted_ids), "userIds": deleted_ids},
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
+    return BulkDeleteOut(deleted=len(deleted_ids))
 
 
 @router.get("/api/admin/people", response_model=list[PersonOut])
 def list_people(_: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     items = db.scalars(select(Person).order_by(Person.name.asc())).all()
     return [person_to_out(item) for item in items]
+
+
+@router.get("/api/admin/people/list", response_model=PersonListOut)
+def list_people_paginated(
+    search: str | None = Query(default=None),
+    role: str | None = Query(default=None),
+    department: str | None = Query(default=None),
+    sortBy: str = Query(default="name"),
+    sortDir: str = Query(default="asc"),
+    page: int = Query(default=1),
+    pageSize: int = Query(default=20),
+    _: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    safe_page, safe_page_size, offset = parse_page_args(page, pageSize)
+    direction = parse_sort_direction(sortDir)
+    sort_columns = {
+        "name": Person.name,
+        "email": Person.email,
+        "role": Person.role,
+        "department": Person.job_department,
+        "updatedAt": Person.updated_at,
+        "createdAt": Person.created_at,
+    }
+    sort_column = sort_columns.get(sortBy)
+    if sort_column is None:
+        raise HTTPException(status_code=400, detail="sortBy must be name|email|role|department|updatedAt|createdAt")
+    conditions: list[object] = []
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        conditions.append(
+            or_(
+                Person.name.ilike(term),
+                Person.email.ilike(term),
+                Person.title.ilike(term),
+                Person.role.ilike(term),
+                Person.job_department.ilike(term),
+                Person.mobile.ilike(term),
+            )
+        )
+    if role and role.strip():
+        conditions.append(Person.role == normalize_role_name(role))
+    if department and department.strip():
+        conditions.append(Person.job_department == department.strip())
+    people_stmt = select(Person)
+    total_stmt = select(func.count()).select_from(Person)
+    if conditions:
+        people_stmt = people_stmt.where(*conditions)
+        total_stmt = total_stmt.where(*conditions)
+    if direction == "asc":
+        people_stmt = people_stmt.order_by(sort_column.asc(), Person.id.asc())
+    else:
+        people_stmt = people_stmt.order_by(sort_column.desc(), Person.id.desc())
+    items = db.scalars(people_stmt.offset(offset).limit(safe_page_size)).all()
+    total = int(db.scalar(total_stmt) or 0)
+    return PersonListOut(
+        items=[person_to_out(item) for item in items],
+        total=total,
+        page=safe_page,
+        pageSize=safe_page_size,
+    )
 
 
 def generate_placeholder_email(name: str, db: Session) -> str:
@@ -264,7 +631,7 @@ def resolve_person_user_email(raw_email: str, name: str, db: Session, exclude_us
 
 
 @router.post("/api/admin/people", response_model=PersonOut)
-def create_person(payload: PersonIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+def create_person(payload: PersonIn, request: Request, current_admin: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
@@ -298,6 +665,25 @@ def create_person(payload: PersonIn, _: User = Depends(require_admin_access), db
     item.user_id = linked_user.id
     db.commit()
     db.refresh(item)
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.person.create",
+        target_type="person",
+        target_id=item.id,
+        status="success",
+        payload={
+            "name": item.name,
+            "email": item.email,
+            "role": item.role,
+            "department": item.job_department,
+            "userId": item.user_id,
+            "tokenIssued": True,
+            "activationExpiresAt": to_iso(activation_expires_at),
+        },
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
     person_out = person_to_out(item)
     return person_out.model_copy(
         update={
@@ -308,13 +694,29 @@ def create_person(payload: PersonIn, _: User = Depends(require_admin_access), db
 
 
 @router.patch("/api/admin/people/{person_id}", response_model=PersonOut)
-def update_person(person_id: str, payload: PersonIn, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+def update_person(
+    person_id: str,
+    payload: PersonIn,
+    request: Request,
+    current_admin: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
     item = db.get(Person, person_id)
     if not item:
         raise HTTPException(status_code=404, detail="Person not found")
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
+    before = {
+        "name": item.name,
+        "email": item.email,
+        "title": item.title,
+        "role": item.role,
+        "department": item.job_department,
+        "mobile": item.mobile,
+        "notes": item.notes,
+        "userId": item.user_id,
+    }
     department = normalize_department(payload.department)
     item.name = name
     item.email = payload.email.strip().lower()
@@ -345,6 +747,33 @@ def update_person(person_id: str, payload: PersonIn, _: User = Depends(require_a
     item.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(item)
+    after = {
+        "name": item.name,
+        "email": item.email,
+        "title": item.title,
+        "role": item.role,
+        "department": item.job_department,
+        "mobile": item.mobile,
+        "notes": item.notes,
+        "userId": item.user_id,
+    }
+    audit_payload: dict[str, object] = {
+        "changed": diff_fields(before, after),
+        "tokenIssued": bool(activation_token),
+    }
+    if activation_expires_at:
+        audit_payload["activationExpiresAt"] = to_iso(activation_expires_at)
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.person.update",
+        target_type="person",
+        target_id=item.id,
+        status="success",
+        payload=audit_payload,
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
     person_out = person_to_out(item)
     if activation_token and activation_expires_at:
         return person_out.model_copy(
@@ -357,13 +786,62 @@ def update_person(person_id: str, payload: PersonIn, _: User = Depends(require_a
 
 
 @router.delete("/api/admin/people/{person_id}")
-def delete_person(person_id: str, _: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+def delete_person(person_id: str, request: Request, current_admin: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     item = db.get(Person, person_id)
     if not item:
         raise HTTPException(status_code=404, detail="Person not found")
+    deleted_payload = {
+        "name": item.name,
+        "email": item.email,
+        "role": item.role,
+        "department": item.job_department,
+        "userId": item.user_id,
+    }
     db.delete(item)
     db.commit()
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.person.delete",
+        target_type="person",
+        target_id=person_id,
+        status="success",
+        payload=deleted_payload,
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
     return {"ok": True}
+
+
+@router.post("/api/admin/people/bulk-delete", response_model=BulkDeleteOut)
+def bulk_delete_people(
+    payload: BulkIdsIn,
+    request: Request,
+    current_admin: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    requested_ids = [value for value in payload.ids if value]
+    if not requested_ids:
+        return BulkDeleteOut(deleted=0)
+    unique_ids = list(dict.fromkeys(requested_ids))
+    items = db.scalars(select(Person).where(Person.id.in_(unique_ids))).all()
+    deleted_ids: list[str] = []
+    for item in items:
+        deleted_ids.append(item.id)
+        db.delete(item)
+    db.commit()
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.person.bulk_delete",
+        target_type="person",
+        target_id=None,
+        status="success",
+        payload={"requested": len(unique_ids), "deleted": len(deleted_ids), "personIds": deleted_ids},
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
+    return BulkDeleteOut(deleted=len(deleted_ids))
 
 
 @router.get("/api/projects", response_model=list[ProjectOut])
@@ -732,6 +1210,28 @@ def delete_asset(asset_id: str, current_user: User = Depends(require_assets_acce
     return {"ok": True}
 
 
+@router.post("/api/assets/bulk-delete", response_model=BulkDeleteOut)
+def bulk_delete_assets(payload: BulkIdsIn, current_user: User = Depends(require_team_assets_access), db: Session = Depends(get_db)):
+    requested_ids = [value for value in payload.ids if value]
+    if not requested_ids:
+        return BulkDeleteOut(deleted=0)
+    unique_ids = list(dict.fromkeys(requested_ids))
+    items = db.scalars(select(Asset).where(Asset.id.in_(unique_ids))).all()
+    deleted = 0
+    for item in items:
+        log_asset_event(
+            db,
+            item.id,
+            current_user.id,
+            "deleted",
+            {"assetTag": item.asset_tag, "status": item.status, "location": item.location, "user": item.user_name},
+        )
+        db.delete(item)
+        deleted += 1
+    db.commit()
+    return BulkDeleteOut(deleted=deleted)
+
+
 @router.get("/api/admin/module-access", response_model=list[RoleModuleAccessOut])
 def list_module_access(_: User = Depends(require_admin_access), db: Session = Depends(get_db)):
     output: list[RoleModuleAccessOut] = []
@@ -761,6 +1261,7 @@ def patch_module_access(
     role_name: str,
     module_name: str,
     payload: RoleModuleAccessPatchIn,
+    request: Request,
     current_admin: User = Depends(require_admin_access),
     db: Session = Depends(get_db),
 ):
@@ -790,7 +1291,188 @@ def patch_module_access(
         raise HTTPException(status_code=400, detail="Cannot remove your own admin module access")
     db.commit()
     db.refresh(row)
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.module_access.update",
+        target_type="module_access",
+        target_id=f"{row.role}:{row.module}",
+        status="success",
+        payload={"role": row.role, "module": row.module, "enabled": row.enabled},
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
     return RoleModuleAccessOut(role=row.role, module=row.module, enabled=row.enabled, updatedAt=to_iso(row.updated_at))
+
+
+@router.get("/api/admin/audit-logs", response_model=AuditLogListOut)
+def list_audit_logs(
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = Query(default=None),
+    actorEmail: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    targetType: str | None = Query(default=None),
+    targetId: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50),
+    cursor: str | None = Query(default=None),
+    _: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    limit_value = min(max(limit, 1), 200)
+    from_dt = parse_iso_datetime(from_, "from") if from_ else None
+    to_dt = parse_iso_datetime(to, "to") if to else None
+    if from_dt and to_dt and to_dt < from_dt:
+        raise HTTPException(status_code=400, detail="to must be greater than from")
+
+    stmt = select(AuditLog)
+    stmt = apply_audit_filters(
+        stmt,
+        from_dt=from_dt,
+        to_dt=to_dt,
+        actor_email=actorEmail,
+        action=action,
+        target_type=targetType,
+        target_id=targetId,
+        status=status_filter,
+    )
+    if cursor:
+        cursor_created_at, cursor_id = decode_audit_cursor(cursor)
+        stmt = stmt.where(
+            or_(
+                AuditLog.created_at < cursor_created_at,
+                and_(AuditLog.created_at == cursor_created_at, AuditLog.id < cursor_id),
+            )
+        )
+    stmt = stmt.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit_value + 1)
+    rows = db.scalars(stmt).all()
+    next_cursor: str | None = None
+    if len(rows) > limit_value:
+        last = rows[limit_value - 1]
+        next_cursor = encode_audit_cursor(last.created_at, last.id)
+        rows = rows[:limit_value]
+    return AuditLogListOut(items=[audit_log_to_out(item) for item in rows], nextCursor=next_cursor)
+
+
+@router.get("/api/admin/audit-logs/export.csv")
+def export_audit_logs_csv(
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = Query(default=None),
+    actorEmail: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    targetType: str | None = Query(default=None),
+    targetId: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    _: User = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    max_window = timedelta(days=31)
+    from_dt = parse_iso_datetime(from_, "from") if from_ else None
+    to_dt = parse_iso_datetime(to, "to") if to else None
+    now = datetime.now(timezone.utc)
+    if from_dt is None and to_dt is None:
+        to_dt = now
+        from_dt = now - max_window
+    elif from_dt is None and to_dt is not None:
+        from_dt = to_dt - max_window
+    elif from_dt is not None and to_dt is None:
+        to_dt = min(from_dt + max_window, now)
+    if from_dt is None or to_dt is None:
+        raise HTTPException(status_code=400, detail="Could not resolve export date window")
+    if to_dt < from_dt:
+        raise HTTPException(status_code=400, detail="to must be greater than from")
+    if to_dt - from_dt > max_window:
+        raise HTTPException(status_code=400, detail="Export window cannot exceed 31 days")
+
+    stmt = select(AuditLog)
+    stmt = apply_audit_filters(
+        stmt,
+        from_dt=from_dt,
+        to_dt=to_dt,
+        actor_email=actorEmail,
+        action=action,
+        target_type=targetType,
+        target_id=targetId,
+        status=status_filter,
+    )
+    rows = db.scalars(stmt.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(10000)).all()
+
+    def stream_csv():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(
+            [
+                "createdAt",
+                "actorEmail",
+                "actorRole",
+                "action",
+                "targetType",
+                "targetId",
+                "status",
+                "requestId",
+                "ipAddress",
+                "payload",
+            ]
+        )
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+        for row in rows:
+            writer.writerow(
+                [
+                    to_iso(row.created_at),
+                    row.actor_email,
+                    row.actor_role,
+                    row.action,
+                    row.target_type,
+                    row.target_id or "",
+                    row.status,
+                    row.request_id,
+                    row.ip_address or "",
+                    row.payload_json or "{}",
+                ]
+            )
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+    filename = f"audit-logs-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.csv"
+    return StreamingResponse(
+        stream_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/api/admin/audit-logs/cleanup", response_model=AuditCleanupOut)
+def cleanup_audit_logs(request: Request, current_admin: User = Depends(require_admin_access), db: Session = Depends(get_db)):
+    total_deleted = 0
+    batch_size = 1000
+    while True:
+        result = db.execute(
+            text(
+                "DELETE FROM audit_logs WHERE id IN ("
+                "SELECT id FROM audit_logs WHERE retention_until < NOW() ORDER BY retention_until ASC LIMIT :batch_size)"
+            ),
+            {"batch_size": batch_size},
+        )
+        deleted = int(result.rowcount or 0)
+        db.commit()
+        total_deleted += deleted
+        if deleted < batch_size:
+            break
+    write_audit_log(
+        db,
+        actor=current_admin,
+        action="admin.audit.cleanup",
+        target_type="audit_log",
+        target_id=None,
+        status="success",
+        payload={"deleted": total_deleted},
+        request_id=get_request_id(request),
+        ip_address=get_request_ip(request),
+    )
+    return AuditCleanupOut(deleted=total_deleted)
 
 
 @router.get("/api/team-events", response_model=list[TeamEventOut])
@@ -875,6 +1557,24 @@ def delete_my_ticket(ticket_id: str, current_user: User = Depends(require_ticket
     db.delete(ticket)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/api/tickets/mine/bulk-delete", response_model=BulkDeleteOut)
+def bulk_delete_my_tickets(payload: BulkIdsIn, current_user: User = Depends(require_tickets_access), db: Session = Depends(get_db)):
+    requested_ids = [value for value in payload.ids if value]
+    if not requested_ids:
+        return BulkDeleteOut(deleted=0)
+    unique_ids = list(dict.fromkeys(requested_ids))
+    tickets = db.scalars(select(Ticket).where(Ticket.id.in_(unique_ids), Ticket.requester_id == current_user.id)).all()
+    ticket_ids = [ticket.id for ticket in tickets]
+    if ticket_ids:
+        events = db.scalars(select(TicketEvent).where(TicketEvent.ticket_id.in_(ticket_ids))).all()
+        for event in events:
+            db.delete(event)
+    for ticket in tickets:
+        db.delete(ticket)
+    db.commit()
+    return BulkDeleteOut(deleted=len(ticket_ids))
 
 
 @router.post("/api/tickets", response_model=TicketOut)

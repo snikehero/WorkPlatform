@@ -1,9 +1,10 @@
+import logging
 import json
 import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ try:
     from .models import (
         Asset,
         AssetEvent,
+        AuditLog,
         KnowledgeArticle,
         MaintenanceRecord,
         Note,
@@ -30,6 +32,7 @@ try:
     from .schemas import (
         AssetEventOut,
         AssetOut,
+        AuditLogOut,
         KnowledgeArticleOut,
         MaintenanceCheckPayload,
         MaintenanceRecordOut,
@@ -48,6 +51,7 @@ except ImportError:
     from models import (
         Asset,
         AssetEvent,
+        AuditLog,
         KnowledgeArticle,
         MaintenanceRecord,
         Note,
@@ -66,6 +70,7 @@ except ImportError:
     from schemas import (
         AssetEventOut,
         AssetOut,
+        AuditLogOut,
         KnowledgeArticleOut,
         MaintenanceCheckPayload,
         MaintenanceRecordOut,
@@ -82,6 +87,11 @@ except ImportError:
 
 UNASSIGNED_USER_LABEL = "Unassigned"
 MODULE_NAMES: tuple[str, ...] = ("personal", "work", "tickets", "assets", "admin")
+AUDIT_RETENTION_DAYS = 180
+AUDIT_PAYLOAD_STR_MAX = 500
+AUDIT_PAYLOAD_JSON_MAX = 4000
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_ROLE_MODULE_ACCESS: dict[str, dict[str, bool]] = {
     UserRole.admin.value: {
@@ -251,6 +261,95 @@ def username_from_email(value: str) -> str:
 
 def to_iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat()
+
+
+def get_request_id(request: Request | None) -> str:
+    if request is None:
+        return str(uuid.uuid4())
+    value = getattr(request.state, "request_id", None)
+    return str(value) if value else str(uuid.uuid4())
+
+
+def get_request_ip(request: Request | None) -> str | None:
+    if request is None or request.client is None:
+        return None
+    return request.client.host
+
+
+def _truncate_text(value: str, max_len: int = AUDIT_PAYLOAD_STR_MAX) -> str:
+    if len(value) <= max_len:
+        return value
+    return f"{value[:max_len]}..."
+
+
+def _sanitize_audit_payload(value: object, depth: int = 0) -> object:
+    if depth > 4:
+        return "[depth-truncated]"
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return _truncate_text(value)
+    if isinstance(value, dict):
+        output: dict[str, object] = {}
+        for key, item in value.items():
+            output[_truncate_text(str(key), 80)] = _sanitize_audit_payload(item, depth + 1)
+        return output
+    if isinstance(value, list):
+        return [_sanitize_audit_payload(item, depth + 1) for item in value[:30]]
+    return _truncate_text(str(value))
+
+
+def sanitize_audit_payload(payload: dict[str, object] | None) -> str:
+    normalized = _sanitize_audit_payload(payload or {})
+    raw = json.dumps(normalized, ensure_ascii=True)
+    if len(raw) <= AUDIT_PAYLOAD_JSON_MAX:
+        return raw
+    preview = _truncate_text(raw, AUDIT_PAYLOAD_JSON_MAX - 64)
+    return json.dumps({"truncated": True, "preview": preview}, ensure_ascii=True)
+
+
+def diff_fields(before: dict[str, object], after: dict[str, object]) -> dict[str, dict[str, object]]:
+    changed: dict[str, dict[str, object]] = {}
+    for key in sorted(set(before.keys()) | set(after.keys())):
+        previous = before.get(key)
+        current = after.get(key)
+        if previous != current:
+            changed[key] = {"before": previous, "after": current}
+    return changed
+
+
+def write_audit_log(
+    db: Session,  # noqa: ARG001
+    *,
+    actor: User | None,
+    action: str,
+    target_type: str,
+    target_id: str | None,
+    status: str,
+    payload: dict[str, object] | None,
+    request_id: str,
+    ip_address: str | None,
+) -> None:
+    try:
+        with SessionLocal() as audit_db:
+            audit_db.add(
+                AuditLog(
+                    actor_user_id=actor.id if actor else None,
+                    actor_email=actor.email if actor else "anonymous",
+                    actor_role=actor.role if actor else "anonymous",
+                    action=action,
+                    target_type=target_type,
+                    target_id=target_id,
+                    status=status,
+                    request_id=request_id,
+                    ip_address=ip_address,
+                    payload_json=sanitize_audit_payload(payload),
+                    retention_until=datetime.now(timezone.utc) + timedelta(days=AUDIT_RETENTION_DAYS),
+                )
+            )
+            audit_db.commit()
+    except Exception:
+        logger.exception("Audit write failed (request_id=%s, action=%s)", request_id, action)
 
 
 def normalize_assigned_user(value: str | None) -> str:
@@ -647,6 +746,31 @@ def asset_event_to_out(event: AssetEvent, db: Session) -> AssetEventOut:
         eventType=event.event_type,
         payload=payload,
         createdAt=to_iso(event.created_at),
+    )
+
+
+def audit_log_to_out(log: AuditLog) -> AuditLogOut:
+    payload: dict[str, object] = {}
+    if log.payload_json:
+        try:
+            raw = json.loads(log.payload_json)
+            if isinstance(raw, dict):
+                payload = raw
+        except json.JSONDecodeError:
+            payload = {"raw": _truncate_text(log.payload_json, 500)}
+    return AuditLogOut(
+        id=log.id,
+        createdAt=to_iso(log.created_at),
+        actorUserId=log.actor_user_id,
+        actorEmail=log.actor_email,
+        actorRole=log.actor_role,
+        action=log.action,
+        targetType=log.target_type,
+        targetId=log.target_id,
+        status=log.status,
+        requestId=log.request_id,
+        ipAddress=log.ip_address,
+        payload=payload,
     )
 
 

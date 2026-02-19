@@ -9,6 +9,11 @@ export const ticketStore = {
     apiRequest<{ ok: boolean }>(`/api/tickets/mine/${ticketId}`, {
       method: "DELETE",
     }),
+  bulkDeleteMine: (ids: string[]) =>
+    apiRequest<{ deleted: number }>("/api/tickets/mine/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
   openUnassigned: () => apiRequest<Ticket[]>("/api/tickets/open-unassigned"),
   assignedMine: () => apiRequest<Ticket[]>("/api/tickets/assigned-mine"),
   assignableUsers: () => apiRequest<TicketAssignee[]>("/api/tickets/assignable-users"),

@@ -3,13 +3,30 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
 import { useToast } from "@/components/ui/toast";
 import { Select } from "@/components/ui/select";
+import { loadSavedView, saveSavedView } from "@/lib/saved-views";
+import { formatTicketSlaState } from "@/lib/ticket-sla";
 import { ticketStore } from "@/stores/ticket-store";
 import type { Ticket } from "@/types/ticket";
 import { useI18n } from "@/i18n/i18n";
 import { useAuthStore } from "@/stores/auth-store";
+
+type SavedView = {
+  developerFilter: "assigned" | "closed";
+  userFilter: "active" | "closed";
+  search: string;
+};
+
+const SAVED_VIEW_ID = "tickets-my";
+
+const DEFAULT_VIEW: SavedView = {
+  developerFilter: "assigned",
+  userFilter: "active",
+  search: "",
+};
 
 export const TicketsMyPage = () => {
   const { t } = useI18n();
@@ -17,11 +34,14 @@ export const TicketsMyPage = () => {
   const navigate = useNavigate();
   const role = useAuthStore.getState().role;
   const isTeamUser = role === "admin" || role === "developer";
+  const savedView = loadSavedView<SavedView>(SAVED_VIEW_ID, DEFAULT_VIEW);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [developerFilter, setDeveloperFilter] = useState<"assigned" | "closed">("assigned");
-  const [userFilter, setUserFilter] = useState<"active" | "closed">("active");
+  const [developerFilter, setDeveloperFilter] = useState<"assigned" | "closed">(savedView.developerFilter);
+  const [userFilter, setUserFilter] = useState<"active" | "closed">(savedView.userFilter);
+  const [search, setSearch] = useState(savedView.search);
+  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
 
   const loadTickets = async () => {
     setLoadError(null);
@@ -41,6 +61,10 @@ export const TicketsMyPage = () => {
     loadTickets();
   }, [isTeamUser]);
 
+  useEffect(() => {
+    saveSavedView(SAVED_VIEW_ID, { developerFilter, userFilter, search });
+  }, [developerFilter, userFilter, search]);
+
   const filteredTickets = useMemo(() => {
     if (!isTeamUser) return tickets;
     if (developerFilter === "closed") return tickets.filter((item) => item.status === "closed");
@@ -53,17 +77,46 @@ export const TicketsMyPage = () => {
     return tickets.filter((item) => item.status !== "closed");
   }, [filteredTickets, isTeamUser, tickets, userFilter]);
 
-  const openCount = useMemo(() => visibleTickets.filter((item) => !["resolved", "closed"].includes(item.status)).length, [visibleTickets]);
+  const searchedTickets = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return visibleTickets;
+    return visibleTickets.filter((ticket) =>
+      [ticket.title, ticket.description, ticket.category, ticket.priority, ticket.status].join(" ").toLowerCase().includes(term)
+    );
+  }, [search, visibleTickets]);
+
+  const openCount = useMemo(() => searchedTickets.filter((item) => !["resolved", "closed"].includes(item.status)).length, [searchedTickets]);
 
   const handleDeleteMine = async (ticketId: string) => {
     const shouldDelete = window.confirm(t("tickets.deleteConfirm"));
     if (!shouldDelete) return;
     try {
       await ticketStore.deleteMine(ticketId);
+      setSelectedIds((current) => {
+        const next = { ...current };
+        delete next[ticketId];
+        return next;
+      });
       await loadTickets();
       showToast(t("tickets.deleted"), "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : t("tickets.deleteFailed"), "error");
+    }
+  };
+
+  const selectedTicketIds = useMemo(() => searchedTickets.filter((item) => selectedIds[item.id]).map((item) => item.id), [searchedTickets, selectedIds]);
+  const allVisibleSelected = searchedTickets.length > 0 && selectedTicketIds.length === searchedTickets.length;
+
+  const handleBulkDeleteMine = async () => {
+    if (selectedTicketIds.length === 0) return;
+    if (!window.confirm(t("tickets.bulkDeleteConfirm", { count: String(selectedTicketIds.length) }))) return;
+    try {
+      const result = await ticketStore.bulkDeleteMine(selectedTicketIds);
+      setSelectedIds({});
+      await loadTickets();
+      showToast(t("tickets.bulkDeleted", { count: String(result.deleted) }), "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : t("tickets.bulkDeleteFailed"), "error");
     }
   };
 
@@ -76,10 +129,13 @@ export const TicketsMyPage = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>{t("tickets.myTitle")}</CardTitle>
-          <CardDescription>{t("tickets.myCounts", { open: openCount, total: visibleTickets.length })}</CardDescription>
+        <CardTitle>{t("tickets.myTitle")}</CardTitle>
+          <CardDescription>{t("tickets.myCounts", { open: openCount, total: searchedTickets.length })}</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4">
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("tickets.searchPlaceholder")} />
+          </div>
           {isTeamUser ? (
             <div className="mb-4 max-w-52">
               <Select value={developerFilter} onChange={(event) => setDeveloperFilter(event.target.value as "assigned" | "closed")}>
@@ -95,19 +151,60 @@ export const TicketsMyPage = () => {
               </Select>
             </div>
           )}
+          {!isTeamUser ? (
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSelectedIds((current) => {
+                      const next = { ...current };
+                      for (const item of searchedTickets) {
+                        if (checked) next[item.id] = true;
+                        else delete next[item.id];
+                      }
+                      return next;
+                    });
+                  }}
+                />
+                {t("tickets.selectAllVisible")}
+              </label>
+              <Button type="button" variant="destructive" onClick={handleBulkDeleteMine} disabled={selectedTicketIds.length === 0}>
+                {t("tickets.bulkDeleteMine", { count: String(selectedTicketIds.length) })}
+              </Button>
+            </div>
+          ) : null}
           {isLoading ? <LoadingState /> : null}
           {!isLoading && loadError ? <ErrorState label={loadError} onRetry={loadTickets} /> : null}
-          {!isLoading && !loadError && visibleTickets.length === 0 ? <EmptyState label={t("tickets.myEmpty")} /> : null}
-          {!isLoading && !loadError && visibleTickets.length > 0 ? (
+          {!isLoading && !loadError && searchedTickets.length === 0 ? <EmptyState label={t("tickets.myEmpty")} /> : null}
+          {!isLoading && !loadError && searchedTickets.length > 0 ? (
             <ul className="space-y-2">
-              {visibleTickets.map((ticket) => (
+              {searchedTickets.map((ticket) => (
                 <li key={ticket.id} className="rounded-md border border-border bg-card p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-foreground">{ticket.title}</p>
+                    <div className="flex items-center gap-2">
+                      {!isTeamUser ? (
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedIds[ticket.id])}
+                          onChange={(event) =>
+                            setSelectedIds((current) => ({
+                              ...current,
+                              [ticket.id]: event.target.checked,
+                            }))
+                          }
+                        />
+                      ) : null}
+                      <p className="text-sm font-medium text-foreground">{ticket.title}</p>
+                    </div>
                     <Badge variant="info">{ticket.status}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">{ticket.category.toUpperCase()} | {ticket.priority.toUpperCase()}</p>
-                  <p className="text-xs text-muted-foreground">SLA: {ticket.slaState}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("tickets.serviceTimingLabel")}: {formatTicketSlaState(t, ticket.slaState)}
+                  </p>
                   {ticket.description ? <p className="mt-1 text-xs text-muted-foreground">{ticket.description}</p> : null}
                   {!isTeamUser ? (
                     <>

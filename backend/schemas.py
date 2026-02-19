@@ -55,13 +55,52 @@ class AdminUserActivationOut(BaseModel):
     activationExpiresAt: str
 
 
+class AdminUserListOut(BaseModel):
+    items: list[AdminUserOut]
+    total: int
+    page: int
+    pageSize: int
+
+
+class AuditLogOut(BaseModel):
+    id: str
+    createdAt: str
+    actorUserId: str | None
+    actorEmail: str
+    actorRole: str
+    action: str
+    targetType: str
+    targetId: str | None
+    status: str
+    requestId: str
+    ipAddress: str | None
+    payload: dict[str, object]
+
+
+class AuditLogListOut(BaseModel):
+    items: list[AuditLogOut]
+    nextCursor: str | None
+
+
+class AuditCleanupOut(BaseModel):
+    deleted: int
+
+
 class AdminUpdateUserIn(BaseModel):
     email: str
     role: UserRole
 
 
 class AdminResetPasswordIn(BaseModel):
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(max_length=128)
+
+
+class BulkIdsIn(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+
+
+class BulkDeleteOut(BaseModel):
+    deleted: int
 
 
 class RoleModuleAccessOut(BaseModel):
@@ -106,6 +145,13 @@ class PersonOut(BaseModel):
     activationExpiresAt: str | None = None
     createdAt: str
     updatedAt: str
+
+
+class PersonListOut(BaseModel):
+    items: list[PersonOut]
+    total: int
+    page: int
+    pageSize: int
 
 
 class ProjectIn(BaseModel):

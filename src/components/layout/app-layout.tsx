@@ -1,6 +1,33 @@
 import type { ReactNode } from "react";
 import React from "react";
-import { CheckSquare, ChevronDown, ChevronRight, LogOut, Menu, Moon, Sun, User } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  Bell,
+  BookOpen,
+  BriefcaseBusiness,
+  CalendarDays,
+  CheckSquare,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  FileSearch,
+  FolderKanban,
+  Inbox,
+  KeyRound,
+  LayoutDashboard,
+  ListTodo,
+  LogOut,
+  Menu,
+  Moon,
+  NotebookPen,
+  Package,
+  Shield,
+  Sun,
+  Ticket,
+  User,
+  Users,
+  Wrench,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -11,11 +38,14 @@ import { moduleAccessStore } from "@/stores/module-access-store";
 const SIDEBAR_OPEN_KEY = "workplatform-sidebar-open";
 const SECTION_OPEN_KEY = "workplatform-sidebar-sections";
 
+type SectionKey = "personal" | "work" | "tickets" | "assets" | "admin";
+
 type SectionState = {
   personal: boolean;
   work: boolean;
   tickets: boolean;
   assets: boolean;
+  admin: boolean;
 };
 
 const DEFAULT_SECTION_STATE: SectionState = {
@@ -23,6 +53,15 @@ const DEFAULT_SECTION_STATE: SectionState = {
   work: true,
   tickets: true,
   assets: true,
+  admin: true,
+};
+
+const sectionIcons: Record<SectionKey, LucideIcon> = {
+  personal: User,
+  work: BriefcaseBusiness,
+  tickets: Ticket,
+  assets: Package,
+  admin: Shield,
 };
 
 export const AppLayout = ({ children }: { children: ReactNode }) => {
@@ -47,6 +86,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
         work: parsed.work ?? true,
         tickets: parsed.tickets ?? true,
         assets: parsed.assets ?? true,
+        admin: parsed.admin ?? true,
       };
     } catch {
       return DEFAULT_SECTION_STATE;
@@ -81,23 +121,48 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
     return unsubscribe;
   }, []);
 
-  const toggleSection = (section: "personal" | "work" | "tickets" | "assets") => {
+  const toggleSection = (section: SectionKey) => {
     setSectionOpen((current) => ({ ...current, [section]: !current[section] }));
   };
 
-  const renderSectionHeader = (section: "personal" | "work" | "tickets" | "assets", label: string) => {
+  const renderSectionHeader = (section: SectionKey, label: string) => {
     if (!isSidebarOpen) return null;
+    const Icon = sectionIcons[section];
     return (
       <button
         type="button"
-        className="flex w-full items-center justify-between text-xs uppercase tracking-wide text-muted-foreground/70 hover:text-muted-foreground"
+        className="flex w-full items-center justify-between rounded-md px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground/70 hover:text-muted-foreground"
         onClick={() => toggleSection(section)}
       >
-        <span>{label}</span>
+        <span className="flex items-center gap-2">
+          <Icon className="size-3.5" />
+          <span>{label}</span>
+        </span>
         {sectionOpen[section] ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
       </button>
     );
   };
+
+  const renderNavLink = (to: string, label: string, Icon: LucideIcon) => (
+    <NavLink
+      key={to}
+      to={to}
+      title={isSidebarOpen ? undefined : label}
+      className={({ isActive }) =>
+        `group relative flex items-center rounded-md px-2 py-2 text-sm ${
+          isSidebarOpen ? "justify-start gap-2" : "justify-center"
+        } ${isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`
+      }
+    >
+      <Icon className="size-4 shrink-0" />
+      {isSidebarOpen ? <span className="truncate">{label}</span> : null}
+      {!isSidebarOpen ? (
+        <span className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-sm group-hover:block">
+          {label}
+        </span>
+      ) : null}
+    </NavLink>
+  );
 
   const canAccessPersonal = moduleAccess.personal;
   const canAccessWork = moduleAccess.work;
@@ -108,107 +173,53 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
-        <aside
-          className={`border-r border-border bg-card transition-all duration-200 ${
-            isSidebarOpen ? "w-64" : "w-16"
-          }`}
-        >
-          <div className="flex h-16 items-center justify-between px-3">
-            <Link to="/dashboard" className="inline-flex items-center gap-2 font-semibold text-foreground">
+        <aside className={`border-r border-border bg-card transition-all duration-200 ${isSidebarOpen ? "w-64" : "w-16"}`}>
+          <div className={`flex h-16 items-center ${isSidebarOpen ? "justify-between px-3" : "justify-center px-2"}`}>
+            <Link to="/dashboard" className="inline-flex items-center gap-2 font-semibold text-foreground" title={t("app.name")}>
               <CheckSquare className="size-5 text-sky-500" />
               {isSidebarOpen ? t("app.name") : null}
             </Link>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-              onClick={() => setIsSidebarOpen((open) => !open)}
-            >
-              <Menu className="size-4" />
-            </Button>
+            {isSidebarOpen ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+                onClick={() => setIsSidebarOpen((open) => !open)}
+              >
+                <Menu className="size-4" />
+              </Button>
+            ) : null}
           </div>
 
-          <div className="space-y-4 px-3 pb-6">
+          {!isSidebarOpen ? (
+            <div className="px-2 pb-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                aria-label="Expand sidebar"
+                onClick={() => setIsSidebarOpen(true)}
+              >
+                <Menu className="size-4" />
+              </Button>
+            </div>
+          ) : null}
+
+          <div className={`space-y-4 pb-6 ${isSidebarOpen ? "px-3" : "px-2"}`}>
             {canAccessPersonal ? (
               <div className="space-y-2">
                 {renderSectionHeader("personal", t("nav.personal"))}
-                {(!isSidebarOpen || sectionOpen.personal) ? (
-                <nav className="space-y-1">
-                  <NavLink
-                    to="/dashboard"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.dailyDashboard")}
-                  </NavLink>
-                  <NavLink
-                    to="/tasks"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.tasks")}
-                  </NavLink>
-                  <NavLink
-                    to="/notes"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.notes")}
-                  </NavLink>
-                  <NavLink
-                    to="/projects"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.projects")}
-                  </NavLink>
-                  <NavLink
-                    to="/weekly"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.weekly")}
-                  </NavLink>
-                  {(userRole === "admin" || userRole === "developer") ? (
-                    <NavLink
-                      to="/team-calendar"
-                      className={({ isActive }) =>
-                        `block rounded-md px-2 py-2 text-sm ${
-                          isActive
-                            ? "bg-muted text-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`
-                      }
-                    >
-                      {t("nav.calendar")}
-                    </NavLink>
-                  ) : null}
-                </nav>
+                {sectionOpen.personal ? (
+                  <nav className="space-y-1">
+                    {renderNavLink("/dashboard", t("nav.dailyDashboard"), LayoutDashboard)}
+                    {renderNavLink("/tasks", t("nav.tasks"), ListTodo)}
+                    {renderNavLink("/notes", t("nav.notes"), NotebookPen)}
+                    {renderNavLink("/projects", t("nav.projects"), FolderKanban)}
+                    {renderNavLink("/weekly", t("nav.weekly"), CalendarDays)}
+                    {(userRole === "admin" || userRole === "developer")
+                      ? renderNavLink("/team-calendar", t("nav.calendar"), CalendarDays)
+                      : null}
+                  </nav>
                 ) : null}
               </div>
             ) : null}
@@ -216,239 +227,65 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
             {canAccessWork ? (
               <div className="space-y-2">
                 {renderSectionHeader("work", t("nav.work"))}
-                {(!isSidebarOpen || sectionOpen.work) ? (
-                <nav className="space-y-1">
-                  {(userRole === "admin" || userRole === "developer") ? (
-                    <>
-                      <NavLink
-                        to="/maintenance/dashboard"
-                        className={({ isActive }) =>
-                          `block rounded-md px-2 py-2 text-sm ${
-                            isActive
-                              ? "bg-muted text-foreground"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`
-                        }
-                      >
-                        {t("nav.maintenanceDashboard")}
-                      </NavLink>
-                      <NavLink
-                        to="/maintenance/registry"
-                        className={({ isActive }) =>
-                          `block rounded-md px-2 py-2 text-sm ${
-                            isActive
-                              ? "bg-muted text-foreground"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`
-                        }
-                      >
-                        {t("nav.maintenanceRegistry")}
-                      </NavLink>
-                      <NavLink
-                        to="/maintenance/create"
-                        className={({ isActive }) =>
-                          `block rounded-md px-2 py-2 text-sm ${
-                            isActive
-                              ? "bg-muted text-foreground"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`
-                        }
-                      >
-                        {t("nav.maintenanceCreate")}
-                      </NavLink>
-                    </>
-                  ) : null}
-                  <NavLink
-                    to="/notifications"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.notifications")}
-                  </NavLink>
-                  {(userRole === "admin" || userRole === "developer") ? (
-                    <NavLink
-                      to="/knowledge-base"
-                      className={({ isActive }) =>
-                        `block rounded-md px-2 py-2 text-sm ${
-                          isActive
-                            ? "bg-muted text-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`
-                      }
-                    >
-                      {t("nav.knowledgeBase")}
-                    </NavLink>
-                  ) : null}
-                </nav>
-                ) : null}
-              </div>
-            ) : null}
-            {canAccessTickets ? (
-              <div className="space-y-2">
-                {renderSectionHeader("tickets", t("nav.ticketsSection"))}
-                {(!isSidebarOpen || sectionOpen.tickets) ? (
-                <nav className="space-y-1">
-                  <NavLink
-                    to="/tickets/create"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.ticketsCreate")}
-                  </NavLink>
-                  {(userRole === "admin" || userRole === "developer") ? (
-                    <>
-                      <NavLink
-                        to="/tickets/open"
-                        className={({ isActive }) =>
-                          `block rounded-md px-2 py-2 text-sm ${
-                            isActive
-                              ? "bg-muted text-foreground"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`
-                        }
-                      >
-                        {t("nav.ticketsOpen")}
-                      </NavLink>
-                    </>
-                  ) : null}
-                  <NavLink
-                    to="/tickets/my"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.ticketsMy")}
-                  </NavLink>
-                </nav>
-                ) : null}
-              </div>
-            ) : null}
-            {canAccessAssets ? (
-              <div className="space-y-2">
-                {renderSectionHeader("assets", t("nav.assetsSection"))}
-                {(!isSidebarOpen || sectionOpen.assets) ? (
+                {sectionOpen.work ? (
                   <nav className="space-y-1">
-                    <NavLink
-                      to="/assets/dashboard"
-                      className={({ isActive }) =>
-                        `block rounded-md px-2 py-2 text-sm ${
-                          isActive
-                            ? "bg-muted text-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`
-                      }
-                    >
-                      {t("nav.assetsDashboard")}
-                    </NavLink>
-                    <NavLink
-                      to="/assets/register"
-                      className={({ isActive }) =>
-                        `block rounded-md px-2 py-2 text-sm ${
-                          isActive
-                            ? "bg-muted text-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`
-                      }
-                    >
-                      {t("nav.assetsRegister")}
-                    </NavLink>
-                    <NavLink
-                      to="/assets/list"
-                      className={({ isActive }) =>
-                        `block rounded-md px-2 py-2 text-sm ${
-                          isActive
-                            ? "bg-muted text-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`
-                      }
-                    >
-                      {t("nav.assetsList")}
-                    </NavLink>
+                    {(userRole === "admin" || userRole === "developer") ? (
+                      <>
+                        {renderNavLink("/maintenance/dashboard", t("nav.maintenanceDashboard"), Wrench)}
+                        {renderNavLink("/maintenance/registry", t("nav.maintenanceRegistry"), ClipboardList)}
+                        {renderNavLink("/maintenance/create", t("nav.maintenanceCreate"), CheckSquare)}
+                      </>
+                    ) : null}
+                    {renderNavLink("/notifications", t("nav.notifications"), Bell)}
+                    {(userRole === "admin" || userRole === "developer")
+                      ? renderNavLink("/knowledge-base", t("nav.knowledgeBase"), BookOpen)
+                      : null}
                   </nav>
                 ) : null}
               </div>
             ) : null}
+
+            {canAccessTickets ? (
+              <div className="space-y-2">
+                {renderSectionHeader("tickets", t("nav.ticketsSection"))}
+                {sectionOpen.tickets ? (
+                  <nav className="space-y-1">
+                    {renderNavLink("/tickets/create", t("nav.ticketsCreate"), Ticket)}
+                    {(userRole === "admin" || userRole === "developer")
+                      ? renderNavLink("/tickets/open", t("nav.ticketsOpen"), Inbox)
+                      : null}
+                    {renderNavLink("/tickets/my", t("nav.ticketsMy"), User)}
+                  </nav>
+                ) : null}
+              </div>
+            ) : null}
+
+            {canAccessAssets ? (
+              <div className="space-y-2">
+                {renderSectionHeader("assets", t("nav.assetsSection"))}
+                {sectionOpen.assets ? (
+                  <nav className="space-y-1">
+                    {renderNavLink("/assets/dashboard", t("nav.assetsDashboard"), LayoutDashboard)}
+                    {renderNavLink("/assets/register", t("nav.assetsRegister"), Package)}
+                    {renderNavLink("/assets/list", t("nav.assetsList"), ClipboardList)}
+                  </nav>
+                ) : null}
+              </div>
+            ) : null}
+
             {canAccessAdmin ? (
               <div className="space-y-2">
-                {isSidebarOpen ? (
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground/70">{t("nav.admin")}</p>
+                {renderSectionHeader("admin", t("nav.admin"))}
+                {sectionOpen.admin ? (
+                  <nav className="space-y-1">
+                    {renderNavLink("/admin", t("nav.dashboard"), LayoutDashboard)}
+                    {renderNavLink("/admin/user-management", t("nav.userManagement"), User)}
+                    {renderNavLink("/admin/people", t("nav.peopleDirectory"), Users)}
+                    {renderNavLink("/admin/users", t("nav.adminUsers"), Users)}
+                    {renderNavLink("/admin/module-access", t("nav.moduleAccess"), KeyRound)}
+                    {renderNavLink("/admin/audit", t("nav.auditLogs"), FileSearch)}
+                  </nav>
                 ) : null}
-                <nav className="space-y-1">
-                  <NavLink
-                    to="/admin"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.dashboard")}
-                  </NavLink>
-                  <NavLink
-                    to="/admin/user-management"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.userManagement")}
-                  </NavLink>
-                  <NavLink
-                    to="/admin/people"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.peopleDirectory")}
-                  </NavLink>
-                  <NavLink
-                    to="/admin/users"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.adminUsers")}
-                  </NavLink>
-                  <NavLink
-                    to="/admin/module-access"
-                    className={({ isActive }) =>
-                      `block rounded-md px-2 py-2 text-sm ${
-                        isActive
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`
-                    }
-                  >
-                    {t("nav.moduleAccess")}
-                  </NavLink>
-                </nav>
               </div>
             ) : null}
           </div>
@@ -466,11 +303,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
                   {t("nav.account")}
                 </Button>
                 <Button variant="ghost" size="sm" aria-label="Toggle theme" onClick={toggleTheme}>
-                  {resolvedTheme === "dark" ? (
-                    <Sun className="mr-1 size-4" />
-                  ) : (
-                    <Moon className="mr-1 size-4" />
-                  )}
+                  {resolvedTheme === "dark" ? <Sun className="mr-1 size-4" /> : <Moon className="mr-1 size-4" />}
                   {resolvedTheme === "dark" ? t("common.light") : t("common.dark")}
                 </Button>
                 <Button variant="secondary" size="sm" onClick={handleLogout}>

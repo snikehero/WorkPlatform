@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state
 import { useToast } from "@/components/ui/toast";
 import { ticketStore } from "@/stores/ticket-store";
 import { useAuthStore } from "@/stores/auth-store";
+import { formatTicketSlaState } from "@/lib/ticket-sla";
 import type { Ticket } from "@/types/ticket";
 import { useI18n } from "@/i18n/i18n";
 
@@ -80,7 +81,9 @@ export const TicketsOpenPage = () => {
                   <p className="text-xs text-muted-foreground">
                     {t("tickets.requesterPrefix")}: {ticket.requesterEmail} | {t("tickets.categoryPrefix")}: {ticket.category.toUpperCase()} | {t("tickets.priorityPrefix")}: {ticket.priority.toUpperCase()}
                   </p>
-                  <p className="text-xs text-muted-foreground">SLA: {ticket.slaState}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("tickets.serviceTimingLabel")}: {formatTicketSlaState(t, ticket.slaState)}
+                  </p>
                   {ticket.description ? <p className="mt-1 text-xs text-muted-foreground">{ticket.description}</p> : null}
                   <div className="mt-2 flex gap-2">
                     <Button size="sm" variant="secondary" onClick={() => assignToMe(ticket.id)}>

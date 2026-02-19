@@ -1,7 +1,11 @@
+import logging
 import os
+import uuid
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 
 try:
@@ -11,6 +15,7 @@ except ImportError:
 
 
 app = FastAPI(title="WorkPlatform API")
+logger = logging.getLogger(__name__)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,6 +23,61 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _get_request_id(request: Request) -> str:
+    value = getattr(request.state, "request_id", None)
+    if value:
+        return str(value)
+    header_value = request.headers.get("x-request-id", "").strip()
+    return header_value or str(uuid.uuid4())
+
+
+def _error_body(message: str, code: str, request_id: str, details: object | None = None) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "error": {
+            "message": message,
+            "code": code,
+            "requestId": request_id,
+        },
+        "detail": message,
+    }
+    if details is not None:
+        payload["error"]["details"] = details
+    return payload
+
+
+@app.exception_handler(HTTPException)
+async def handle_http_exception(request: Request, exc: HTTPException):
+    request_id = _get_request_id(request)
+    detail = exc.detail
+    message = detail if isinstance(detail, str) else "Request failed"
+    body = _error_body(message, f"http_{exc.status_code}", request_id, None if isinstance(detail, str) else detail)
+    return JSONResponse(status_code=exc.status_code, content=body, headers={"X-Request-ID": request_id})
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_validation_exception(request: Request, exc: RequestValidationError):
+    request_id = _get_request_id(request)
+    body = _error_body("Validation error", "validation_error", request_id, exc.errors())
+    return JSONResponse(status_code=422, content=body, headers={"X-Request-ID": request_id})
+
+
+@app.exception_handler(Exception)
+async def handle_unexpected_exception(request: Request, exc: Exception):
+    request_id = _get_request_id(request)
+    logger.exception("Unhandled exception (request_id=%s)", request_id, exc_info=exc)
+    body = _error_body("Internal server error", "internal_server_error", request_id)
+    return JSONResponse(status_code=500, content=body, headers={"X-Request-ID": request_id})
+
+
+@app.middleware("http")
+async def inject_request_id(request: Request, call_next):
+    request_id = request.headers.get("x-request-id", "").strip() or str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 @app.on_event("startup")
@@ -30,6 +90,12 @@ def on_startup():
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS activation_expires_at TIMESTAMPTZ"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_activation_token_hash ON users (activation_token_hash)"))
         conn.execute(text("UPDATE users SET must_set_password = FALSE WHERE must_set_password IS NULL"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_created_at_desc ON audit_logs (created_at DESC)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_action_created_at_desc ON audit_logs (action, created_at DESC)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_actor_user_id_created_at_desc ON audit_logs (actor_user_id, created_at DESC)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_target_created_at_desc ON audit_logs (target_type, target_id, created_at DESC)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_retention_until ON audit_logs (retention_until)"))
+        conn.execute(text("DELETE FROM audit_logs WHERE retention_until < NOW()"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'help'"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS process_notes TEXT DEFAULT ''"))
         conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '[]'"))

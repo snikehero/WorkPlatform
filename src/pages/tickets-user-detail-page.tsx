@@ -5,8 +5,58 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/i18n/i18n";
+import { formatTicketSlaState } from "@/lib/ticket-sla";
 import { ticketStore } from "@/stores/ticket-store";
 import type { Ticket, TicketEvent } from "@/types/ticket";
+
+type ProcessField = {
+  key: "issueContext" | "diagnostics" | "rootCause" | "fixApplied" | "validation" | "followUp";
+  labelKey: string;
+  sectionTitle: string;
+};
+
+type ParsedProcess = Record<ProcessField["key"], string>;
+
+const PROCESS_FIELDS: ProcessField[] = [
+  { key: "issueContext", labelKey: "tickets.fieldIssueContext", sectionTitle: "Issue Context" },
+  { key: "diagnostics", labelKey: "tickets.fieldDiagnostics", sectionTitle: "Diagnostics Run" },
+  { key: "rootCause", labelKey: "tickets.fieldRootCause", sectionTitle: "Root Cause" },
+  { key: "fixApplied", labelKey: "tickets.fieldFixApplied", sectionTitle: "Fix Applied" },
+  { key: "validation", labelKey: "tickets.fieldValidation", sectionTitle: "Validation" },
+  { key: "followUp", labelKey: "tickets.fieldFollowUp", sectionTitle: "Follow-up / Prevention" },
+];
+
+const EMPTY_PARSED_PROCESS: ParsedProcess = {
+  issueContext: "",
+  diagnostics: "",
+  rootCause: "",
+  fixApplied: "",
+  validation: "",
+  followUp: "",
+};
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const parseStructuredProcessNotes = (rawValue: string): ParsedProcess => {
+  const raw = (rawValue || "").trim();
+  if (!raw) return { ...EMPTY_PARSED_PROCESS };
+  const next: ParsedProcess = { ...EMPTY_PARSED_PROCESS };
+  let foundStructuredSection = false;
+  for (const field of PROCESS_FIELDS) {
+    const regex = new RegExp(
+      `###\\s*\\d+\\)\\s*${escapeRegExp(field.sectionTitle)}\\s*\\n([\\s\\S]*?)(?=\\n###\\s*\\d+\\)|$)`,
+      "i"
+    );
+    const match = raw.match(regex);
+    if (!match) continue;
+    next[field.key] = match[1].trim();
+    foundStructuredSection = true;
+  }
+  if (!foundStructuredSection) {
+    next.issueContext = raw;
+  }
+  return next;
+};
 
 const getStatusVariant = (status: Ticket["status"]) => {
   if (status === "resolved" || status === "closed") return "success" as const;
@@ -23,6 +73,7 @@ export const TicketsUserDetailPage = () => {
   const [events, setEvents] = useState<TicketEvent[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [parsedProcess, setParsedProcess] = useState<ParsedProcess>({ ...EMPTY_PARSED_PROCESS });
 
   useEffect(() => {
     if (!ticketId) return;
@@ -30,10 +81,12 @@ export const TicketsUserDetailPage = () => {
       .then(([item, eventItems]) => {
         setTicket(item);
         setEvents(eventItems);
+        setParsedProcess(parseStructuredProcessNotes(item.processNotes ?? ""));
       })
       .catch((error) => {
         setTicket(null);
         setEvents([]);
+        setParsedProcess({ ...EMPTY_PARSED_PROCESS });
         const errorMessage = error instanceof Error ? error.message : t("tickets.detailLoadFailed");
         setMessage(errorMessage);
         showToast(errorMessage, "error");
@@ -99,7 +152,9 @@ export const TicketsUserDetailPage = () => {
         </CardHeader>
         <CardContent className="space-y-2">
           <Badge variant={getStatusVariant(ticket.status)}>{ticket.status}</Badge>
-          <p className="text-xs text-muted-foreground">SLA: {ticket.slaState}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("tickets.serviceTimingLabel")}: {formatTicketSlaState(t, ticket.slaState)}
+          </p>
           <p className="text-xs text-muted-foreground">
             {t("tickets.handledByPrefix")}: {ticket.assigneeEmail ?? t("common.unassigned")}
           </p>
@@ -111,8 +166,20 @@ export const TicketsUserDetailPage = () => {
         <CardHeader>
           <CardTitle>{t("tickets.processTitle")}</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm whitespace-pre-wrap text-muted-foreground">{ticket.processNotes || "-"}</p>
+        <CardContent className="space-y-3">
+          {PROCESS_FIELDS.map((field) => {
+            const value = parsedProcess[field.key].trim();
+            if (!value) return null;
+            return (
+              <div key={field.key} className="space-y-1 rounded-md border border-border p-3">
+                <p className="text-xs font-medium text-foreground">{t(field.labelKey)}</p>
+                <p className="text-sm whitespace-pre-wrap text-muted-foreground">{value}</p>
+              </div>
+            );
+          })}
+          {!PROCESS_FIELDS.some((field) => Boolean(parsedProcess[field.key].trim())) ? (
+            <p className="text-sm whitespace-pre-wrap text-muted-foreground">-</p>
+          ) : null}
         </CardContent>
       </Card>
 

@@ -34,4 +34,9 @@ export const assetStore = {
     apiRequest<{ ok: boolean }>(`/api/assets/${assetId}`, {
       method: "DELETE",
     }),
+  bulkRemove: (ids: string[]) =>
+    apiRequest<{ deleted: number }>("/api/assets/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
 };
