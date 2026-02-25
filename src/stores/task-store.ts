@@ -3,10 +3,21 @@ import type { Task, TaskStatus } from "@/types/task";
 
 export const taskStore = {
   all: () => apiRequest<Task[]>("/api/tasks"),
+  one: (taskId: string) => apiRequest<Task>(`/api/tasks/${taskId}`),
   add: (title: string, details: string, projectId: string | null, taskDate: string) =>
     apiRequest<Task>("/api/tasks", {
       method: "POST",
       body: JSON.stringify({ title, details, projectId, taskDate }),
+    }),
+  updateDetail: (
+    taskId: string,
+    completionSummary: string,
+    documentation: string,
+    additionalNotes: string,
+  ) =>
+    apiRequest<Task>(`/api/tasks/${taskId}/detail`, {
+      method: "PATCH",
+      body: JSON.stringify({ completionSummary, documentation, additionalNotes }),
     }),
   updateStatus: (taskId: string, status: TaskStatus) =>
     apiRequest<{ ok: boolean }>(`/api/tasks/${taskId}/status`, {

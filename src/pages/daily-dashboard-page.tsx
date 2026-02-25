@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { taskStore } from "@/stores/task-store";
 import { noteStore } from "@/stores/note-store";
 import { ticketStore } from "@/stores/ticket-store";
 import { teamEventStore } from "@/stores/team-event-store";
-import { notificationStore } from "@/stores/notification-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { moduleAccessStore } from "@/stores/module-access-store";
 import type { Task } from "@/types/task";
 import type { Note } from "@/types/note";
 import type { Ticket } from "@/types/ticket";
 import type { TeamEvent } from "@/types/team-event";
-import type { AppNotification } from "@/types/notification";
 import { useI18n } from "@/i18n/i18n";
 
 export const DailyDashboardPage = () => {
@@ -22,29 +19,25 @@ export const DailyDashboardPage = () => {
   const [moduleAccess, setModuleAccess] = useState(moduleAccessStore.getState().modules);
   const canAccessTeam = role === "admin" || role === "developer";
   const canAccessPersonal = moduleAccess.personal;
-  const canAccessWork = moduleAccess.work;
   const canAccessTickets = moduleAccess.tickets;
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [events, setEvents] = useState<TeamEvent[]>([]);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const loadData = async () => {
-    const [taskResult, noteResult, ticketResult, eventResult, notificationResult] = await Promise.allSettled([
+    const [taskResult, noteResult, ticketResult, eventResult] = await Promise.allSettled([
       canAccessPersonal ? taskStore.all() : Promise.resolve([]),
       canAccessPersonal ? noteStore.all() : Promise.resolve([]),
       canAccessTickets ? ticketStore.mine() : Promise.resolve([]),
       canAccessPersonal && canAccessTeam ? teamEventStore.all() : Promise.resolve([]),
-      canAccessWork ? notificationStore.all() : Promise.resolve([]),
     ]);
 
     setTasks(taskResult.status === "fulfilled" ? taskResult.value : []);
     setNotes(noteResult.status === "fulfilled" ? noteResult.value : []);
     setTickets(ticketResult.status === "fulfilled" ? ticketResult.value : []);
     setEvents(eventResult.status === "fulfilled" ? eventResult.value : []);
-    setNotifications(notificationResult.status === "fulfilled" ? notificationResult.value : []);
   };
 
   useEffect(() => {
@@ -58,9 +51,8 @@ export const DailyDashboardPage = () => {
       setNotes([]);
       setTickets([]);
       setEvents([]);
-      setNotifications([]);
     });
-  }, [canAccessTeam, canAccessPersonal, canAccessTickets, canAccessWork]);
+  }, [canAccessTeam, canAccessPersonal, canAccessTickets]);
 
   const todayTasks = useMemo(() => tasks.filter((task) => task.taskDate === today), [tasks, today]);
   const todayNotes = useMemo(() => notes.filter((note) => note.noteDate === today), [notes, today]);
@@ -73,14 +65,6 @@ export const DailyDashboardPage = () => {
     () => events.filter((event) => event.eventDate >= today).sort((a, b) => a.eventDate.localeCompare(b.eventDate)).slice(0, 5),
     [events, today]
   );
-  const activeReminders = useMemo(
-    () =>
-      notifications
-        .filter((item) => !item.read && (item.category === "reminder" || (item.dueDate !== null && item.dueDate <= today)))
-        .slice(0, 5),
-    [notifications, today]
-  );
-
   return (
     <div className="space-y-6">
       <section>
@@ -132,34 +116,6 @@ export const DailyDashboardPage = () => {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        {canAccessWork ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("dashboard.remindersTitle")}</CardTitle>
-              <CardDescription>{t("dashboard.remindersSubtitle")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {activeReminders.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("dashboard.emptyReminders")}</p>
-              ) : (
-                <ul className="space-y-2">
-                  {activeReminders.map((item) => (
-                    <li key={item.id} className="rounded-md border border-border p-3">
-                      <p className="text-sm font-medium">{item.title}</p>
-                      {item.message ? <p className="text-xs text-muted-foreground">{item.message}</p> : null}
-                      <div className="mt-2">
-                        <Badge variant={item.category === "warning" ? "warning" : item.category === "reminder" ? "info" : "neutral"}>
-                          {item.category.toUpperCase()}
-                        </Badge>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-        ) : null}
-
         {canAccessPersonal && canAccessTeam ? (
           <Card>
             <CardHeader>

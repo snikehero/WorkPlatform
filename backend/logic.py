@@ -17,7 +17,6 @@ try:
         KnowledgeArticle,
         MaintenanceRecord,
         Note,
-        Notification,
         Person,
         Project,
         SessionLocal,
@@ -37,7 +36,6 @@ try:
         MaintenanceCheckPayload,
         MaintenanceRecordOut,
         NoteOut,
-        NotificationOut,
         PersonOut,
         ProjectOut,
         TaskOut,
@@ -55,7 +53,6 @@ except ImportError:
         KnowledgeArticle,
         MaintenanceRecord,
         Note,
-        Notification,
         Person,
         Project,
         SessionLocal,
@@ -75,7 +72,6 @@ except ImportError:
         MaintenanceCheckPayload,
         MaintenanceRecordOut,
         NoteOut,
-        NotificationOut,
         PersonOut,
         ProjectOut,
         TaskOut,
@@ -549,6 +545,9 @@ def task_to_out(task: Task) -> TaskOut:
         id=task.id,
         title=task.title,
         details=task.details,
+        completionSummary=task.completion_summary,
+        documentation=task.documentation,
+        additionalNotes=task.additional_notes,
         status=task.status,
         projectId=task.project_id,
         taskDate=task.task_date.isoformat(),
@@ -677,18 +676,6 @@ def maintenance_to_out(record: MaintenanceRecord) -> MaintenanceRecordOut:
             for item in record.checks
         ],
         createdAt=to_iso(record.created_at),
-    )
-
-
-def notification_to_out(notification: Notification) -> NotificationOut:
-    return NotificationOut(
-        id=notification.id,
-        title=notification.title,
-        message=notification.message,
-        category=notification.category,
-        dueDate=notification.due_date.isoformat() if notification.due_date else None,
-        read=notification.is_read,
-        createdAt=to_iso(notification.created_at),
     )
 
 

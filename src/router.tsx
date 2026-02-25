@@ -4,6 +4,7 @@ import { DailyNotesPage } from "@/pages/daily-notes-page";
 import { LoginPage } from "@/pages/login-page";
 import { ProjectsPage } from "@/pages/projects-page";
 import { DailyTasksPage } from "@/pages/daily-tasks-page";
+import { TaskDetailPage } from "@/pages/task-detail-page";
 import { WeeklyReviewPage } from "@/pages/weekly-review-page";
 import { TeamCalendarPage } from "@/pages/team-calendar-page";
 import { MaintenanceCreatePage } from "@/pages/maintenance-create-page";
@@ -17,8 +18,7 @@ import { TicketsMyPage } from "@/pages/tickets-my-page";
 import { TicketsUserDetailPage } from "@/pages/tickets-user-detail-page";
 import { TicketSolutionPage } from "@/pages/ticket-solution-page";
 import { AccountPage } from "@/pages/account-page";
-import { DailyDashboardPage } from "@/pages/daily-dashboard-page";
-import { NotificationsPage } from "@/pages/notifications-page";
+import { HomePage } from "@/pages/home-page";
 import { KnowledgeBasePage } from "@/pages/knowledge-base-page";
 import { AssetInventoryPage } from "@/pages/asset-inventory-page";
 import { AssetListPage } from "@/pages/asset-list-page";
@@ -86,9 +86,9 @@ export const router = createBrowserRouter([
   {
     path: "/dashboard",
     element: (
-      <ProtectedRoute module="personal">
+      <ProtectedRoute>
         <AppLayout>
-          <DailyDashboardPage />
+          <HomePage />
         </AppLayout>
       </ProtectedRoute>
     ),
@@ -115,6 +115,16 @@ export const router = createBrowserRouter([
       <ProtectedRoute module="personal">
         <AppLayout>
           <DailyTasksPage />
+        </AppLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/tasks/:taskId/detail",
+    element: (
+      <ProtectedRoute module="personal">
+        <AppLayout>
+          <TaskDetailPage />
         </AppLayout>
       </ProtectedRoute>
     ),
@@ -269,16 +279,6 @@ export const router = createBrowserRouter([
           <TicketSolutionPage />
         </AppLayout>
       </TeamRoute>
-    ),
-  },
-  {
-    path: "/notifications",
-    element: (
-      <ProtectedRoute module="work">
-        <AppLayout>
-          <NotificationsPage />
-        </AppLayout>
-      </ProtectedRoute>
     ),
   },
   {

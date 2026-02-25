@@ -648,7 +648,6 @@ def create_person(payload: PersonIn, request: Request, current_admin: User = Dep
         mobile=payload.mobile.strip(),
         notes=payload.notes.strip(),
         lang="en",
-        tickets_notification=False,
     )
     db.add(item)
     db.flush()
@@ -875,12 +874,23 @@ def list_tasks(current_user: User = Depends(require_personal_access), db: Sessio
     return [task_to_out(item) for item in tasks]
 
 
+@router.get("/api/tasks/{task_id}", response_model=TaskOut)
+def get_task(task_id: str, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
+    task = db.scalar(select(Task).where(Task.id == task_id, Task.owner_id == current_user.id))
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task_to_out(task)
+
+
 @router.post("/api/tasks", response_model=TaskOut)
 def create_task(payload: TaskIn, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     task = Task(
         owner_id=current_user.id,
         title=payload.title,
         details=payload.details,
+        completion_summary="",
+        documentation="",
+        additional_notes="",
         project_id=payload.projectId,
         task_date=parse_date(payload.taskDate),
         status="todo",
@@ -891,12 +901,30 @@ def create_task(payload: TaskIn, current_user: User = Depends(require_personal_a
     return task_to_out(task)
 
 
+@router.patch("/api/tasks/{task_id}/detail", response_model=TaskOut)
+def update_task_detail(task_id: str, payload: TaskDetailPatch, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
+    task = db.scalar(select(Task).where(Task.id == task_id, Task.owner_id == current_user.id))
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.completion_summary = payload.completionSummary.strip()
+    task.documentation = payload.documentation.strip()
+    task.additional_notes = payload.additionalNotes.strip()
+    db.commit()
+    db.refresh(task)
+    return task_to_out(task)
+
+
 @router.patch("/api/tasks/{task_id}/status")
 def update_task_status(task_id: str, payload: TaskStatusPatch, current_user: User = Depends(require_personal_access), db: Session = Depends(get_db)):
     task = db.scalar(select(Task).where(Task.id == task_id, Task.owner_id == current_user.id))
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    task.status = payload.status
+    status_value = (payload.status or "").strip().lower()
+    if status_value not in ("todo", "in-progress", "done"):
+        raise HTTPException(status_code=400, detail="status must be todo|in-progress|done")
+    if status_value == "done" and not task.completion_summary.strip():
+        raise HTTPException(status_code=400, detail="Task summary is required before completing the task")
+    task.status = status_value
     db.commit()
     return {"ok": True}
 
@@ -932,60 +960,6 @@ def delete_note(note_id: str, current_user: User = Depends(require_personal_acce
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     db.delete(note)
-    db.commit()
-    return {"ok": True}
-
-
-@router.get("/api/notifications", response_model=list[NotificationOut])
-def list_notifications(current_user: User = Depends(require_work_access), db: Session = Depends(get_db)):
-    notifications = db.scalars(
-        select(Notification)
-        .where(Notification.owner_id == current_user.id)
-        .order_by(Notification.is_read.asc(), Notification.due_date.asc(), Notification.created_at.desc())
-    ).all()
-    return [notification_to_out(item) for item in notifications]
-
-
-@router.post("/api/notifications", response_model=NotificationOut)
-def create_notification(payload: NotificationIn, current_user: User = Depends(require_work_access), db: Session = Depends(get_db)):
-    category = payload.category.strip().lower()
-    if category not in ("info", "reminder", "warning"):
-        raise HTTPException(status_code=400, detail="category must be info|reminder|warning")
-    item = Notification(
-        owner_id=current_user.id,
-        title=payload.title.strip(),
-        message=payload.message.strip(),
-        category=category,
-        due_date=parse_optional_date(payload.dueDate),
-        is_read=False,
-    )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return notification_to_out(item)
-
-
-@router.patch("/api/notifications/{notification_id}/read")
-def patch_notification_read(
-    notification_id: str,
-    payload: NotificationReadPatchIn,
-    current_user: User = Depends(require_work_access),
-    db: Session = Depends(get_db),
-):
-    item = db.scalar(select(Notification).where(Notification.id == notification_id, Notification.owner_id == current_user.id))
-    if not item:
-        raise HTTPException(status_code=404, detail="Notification not found")
-    item.is_read = payload.read
-    db.commit()
-    return {"ok": True}
-
-
-@router.delete("/api/notifications/{notification_id}")
-def delete_notification(notification_id: str, current_user: User = Depends(require_work_access), db: Session = Depends(get_db)):
-    item = db.scalar(select(Notification).where(Notification.id == notification_id, Notification.owner_id == current_user.id))
-    if not item:
-        raise HTTPException(status_code=404, detail="Notification not found")
-    db.delete(item)
     db.commit()
     return {"ok": True}
 

@@ -12,7 +12,7 @@ WorkPlatform is an internal operations platform with:
 - Auth + roles (`admin`, `developer`, `user`)
 - Module-level access control (`personal`, `work`, `tickets`, `assets`, `admin`)
 - Personal productivity (tasks, notes, projects, weekly review)
-- Team features (calendar, notifications, knowledge base)
+- Team features (calendar, knowledge base)
 - Ticket workflow with SLA and evidence
 - Asset inventory + asset event history
 - Maintenance records + Excel export
@@ -231,7 +231,6 @@ Personal/work:
 
 - `/api/projects*`, `/api/tasks*`, `/api/notes*`
 - `/api/team-events*`
-- `/api/notifications*`
 - `/api/knowledge-base*`
 
 Tickets:
@@ -273,4 +272,3 @@ If backend data contracts change, include required frontend/store/type updates.
 If frontend forms change, keep i18n keys and role/module access behavior consistent.
 Task: {TASK}
 ```
-

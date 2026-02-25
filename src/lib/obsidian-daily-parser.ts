@@ -4,6 +4,13 @@ type ParsedDailyNote = {
   noteDate: string;
 };
 
+const getLocalDateKey = (value: Date) => {
+  const year = value.getFullYear();
+  const month = (value.getMonth() + 1).toString().padStart(2, "0");
+  const day = value.getDate().toString().padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const MONTHS_ES: Record<string, number> = {
   enero: 1,
   febrero: 2,
@@ -104,7 +111,7 @@ export const parseObsidianDailyMarkdown = (filename: string, markdown: string): 
   }
 
   if (!noteDate) {
-    noteDate = new Date().toISOString().slice(0, 10);
+    noteDate = getLocalDateKey(new Date());
   }
 
   const contentParts = [

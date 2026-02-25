@@ -12,8 +12,8 @@ import { getDefaultLandingPath } from "@/lib/module-access";
 export const LoginPage = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
-  const [email, setEmail] = useState("admin@workplatform.local");
-  const [password, setPassword] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

@@ -16,6 +16,7 @@ type TaskListProps = {
   projects: Project[];
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
+  onOpenTaskDetail: (taskId: string) => void;
   showCompleted: boolean;
 };
 
@@ -24,6 +25,7 @@ export const TaskList = ({
   projects,
   onUpdateStatus,
   onDeleteTask,
+  onOpenTaskDetail,
   showCompleted,
 }: TaskListProps) => {
   const { t } = useI18n();
@@ -67,9 +69,14 @@ export const TaskList = ({
                       ) : null}
                     </div>
                   </div>
-                  <Button variant="destructive" size="sm" onClick={() => onDeleteTask(task.id)}>
-                    {t("common.delete")}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => onOpenTaskDetail(task.id)}>
+                      {t("tasks.taskDetailButton")}
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => onDeleteTask(task.id)}>
+                      {t("common.delete")}
+                    </Button>
+                  </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button size="sm" variant="secondary" onClick={() => onUpdateStatus(task.id, "todo")}>

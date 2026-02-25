@@ -39,10 +39,6 @@ export const buildModuleAccessMap = (role: AppRole, partial?: Partial<Record<str
 
 export const getDefaultLandingPath = (role: AppRole | null, modules: ModuleAccessMap): string => {
   if (!role) return "/login";
-  if (modules.personal) return "/dashboard";
-  if (modules.tickets) return role === "admin" || role === "developer" ? "/tickets/open" : "/tickets/create";
-  if (modules.work) return "/notifications";
-  if (modules.assets && (role === "admin" || role === "developer")) return "/assets/dashboard";
-  if (modules.admin && role === "admin") return "/admin";
-  return "/account";
+  const hasAnyModule = modules.personal || modules.work || modules.tickets || modules.assets || modules.admin;
+  return hasAnyModule ? "/dashboard" : "/account";
 };

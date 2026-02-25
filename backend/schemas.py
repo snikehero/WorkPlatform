@@ -177,10 +177,19 @@ class TaskStatusPatch(BaseModel):
     status: str
 
 
+class TaskDetailPatch(BaseModel):
+    completionSummary: str = ""
+    documentation: str = ""
+    additionalNotes: str = ""
+
+
 class TaskOut(BaseModel):
     id: str
     title: str
     details: str
+    completionSummary: str
+    documentation: str
+    additionalNotes: str
     status: str
     projectId: str | None
     taskDate: str
@@ -331,27 +340,6 @@ class MaintenanceRecordOut(BaseModel):
     location: str
     responsibleName: str
     checks: list[MaintenanceCheckPayload]
-    createdAt: str
-
-
-class NotificationIn(BaseModel):
-    title: str
-    message: str = ""
-    category: str = "info"
-    dueDate: str | None = None
-
-
-class NotificationReadPatchIn(BaseModel):
-    read: bool
-
-
-class NotificationOut(BaseModel):
-    id: str
-    title: str
-    message: str
-    category: str
-    dueDate: str | None
-    read: bool
     createdAt: str
 
 

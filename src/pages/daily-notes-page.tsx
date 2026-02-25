@@ -11,13 +11,22 @@ import type { Note } from "@/types/note";
 import { format } from "date-fns";
 import { useI18n } from "@/i18n/i18n";
 
+const getLocalDateKey = (value: Date) => format(value, "yyyy-MM-dd");
+
+const parseLocalDateKey = (value: string): Date => {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return new Date();
+  return new Date(year, month - 1, day);
+};
+
 export const DailyNotesPage = () => {
   const { t } = useI18n();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateKey(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const selectedCalendarDate = useMemo(() => parseLocalDateKey(selectedDate), [selectedDate]);
 
   const loadNotes = async () => {
     const data = await noteStore.all();
@@ -110,16 +119,16 @@ export const DailyNotesPage = () => {
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="secondary" className="min-w-[220px] justify-start">
-                    {format(new Date(selectedDate), "PPP")}
+                    {format(selectedCalendarDate, "PPP")}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="p-0" align="start">
                   <Calendar
                     mode="single"
-                    selected={new Date(selectedDate)}
+                    selected={selectedCalendarDate}
                     onSelect={(date) => {
                       if (!date) return;
-                      setSelectedDate(format(date, "yyyy-MM-dd"));
+                      setSelectedDate(getLocalDateKey(date));
                     }}
                     initialFocus
                     classNames={calendarClassNames}
@@ -127,7 +136,7 @@ export const DailyNotesPage = () => {
                 </PopoverContent>
               </Popover>
             </div>
-            <Button variant="secondary" onClick={() => setSelectedDate(today)}>
+            <Button variant="secondary" onClick={() => setSelectedDate(getLocalDateKey(new Date()))}>
               {t("common.today")}
             </Button>
             <input

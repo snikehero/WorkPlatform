@@ -8,7 +8,7 @@ Main modules:
 - Assets + asset lifecycle history
 - Maintenance (Dashboard, Registry, Create)
 - Projects, daily tasks, daily notes
-- Knowledge base, notifications, team calendar
+- Knowledge base, team calendar
 
 ## Tech Stack
 

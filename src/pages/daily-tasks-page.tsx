@@ -7,6 +7,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select } from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast";
 import { projectStore } from "@/stores/project-store";
 import { taskStore } from "@/stores/task-store";
 import type { Project } from "@/types/project";
@@ -14,10 +15,21 @@ import type { Task, TaskStatus } from "@/types/task";
 import { format } from "date-fns";
 import { Copy } from "lucide-react";
 import { useI18n } from "@/i18n/i18n";
+import { useNavigate } from "react-router-dom";
+
+const getLocalDateKey = (value: Date) => format(value, "yyyy-MM-dd");
+
+const parseLocalDateKey = (value: string): Date => {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return new Date();
+  return new Date(year, month - 1, day);
+};
 
 export const DailyTasksPage = () => {
   const { t } = useI18n();
-  const today = new Date().toISOString().slice(0, 10);
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+  const today = getLocalDateKey(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
   const [showCompleted, setShowCompleted] = useState(true);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
@@ -25,6 +37,7 @@ export const DailyTasksPage = () => {
   const [viewMode, setViewMode] = useState<"list" | "board">("list");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const selectedCalendarDate = useMemo(() => parseLocalDateKey(selectedDate), [selectedDate]);
 
   const loadData = async () => {
     const [nextTasks, nextProjects] = await Promise.all([taskStore.all(), projectStore.all()]);
@@ -64,8 +77,18 @@ export const DailyTasksPage = () => {
   };
 
   const handleUpdateStatus = async (taskId: string, status: TaskStatus) => {
+    const currentTask = tasks.find((item) => item.id === taskId);
+    if (status === "done" && currentTask?.status !== "done") {
+      navigate(`/tasks/${taskId}/detail?complete=1`);
+      showToast(t("tasks.completeNeedsDetail"), "info");
+      return;
+    }
     await taskStore.updateStatus(taskId, status);
     await loadData();
+  };
+
+  const handleOpenTaskDetail = (taskId: string) => {
+    navigate(`/tasks/${taskId}/detail`);
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -79,7 +102,7 @@ export const DailyTasksPage = () => {
     const open = dateTasks.filter((task) => task.status === "todo");
 
     const summaryLines = [
-      `${t("tasks.summaryHeading")} - ${format(new Date(selectedDate), "PPP")}`,
+      `${t("tasks.summaryHeading")} - ${format(selectedCalendarDate, "PPP")}`,
       "",
       `${t("tasks.completedHeading")} (${completed.length}):`,
       ...completed.map((task) => `- ${task.title}`),
@@ -92,7 +115,7 @@ export const DailyTasksPage = () => {
     ];
 
     return summaryLines.join("\n");
-  }, [dateTasks, selectedDate]);
+  }, [dateTasks, selectedCalendarDate, t]);
 
   const handleCopySummary = async () => {
     try {
@@ -151,24 +174,24 @@ export const DailyTasksPage = () => {
                     variant="secondary"
                     className="min-w-[220px] justify-start"
                   >
-                    {format(new Date(selectedDate), "PPP")}
+                    {format(selectedCalendarDate, "PPP")}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="p-0" align="start">
                   <Calendar
                     className="rounded-lg border"
                     mode="single"
-                    selected={new Date(selectedDate)}
+                    selected={selectedCalendarDate}
                     onSelect={(date) => {
                       if (!date) return;
-                      setSelectedDate(format(date, "yyyy-MM-dd"));
+                      setSelectedDate(getLocalDateKey(date));
                     }}
                     classNames={calendarClassNames}
                   />
                 </PopoverContent>
               </Popover>
             </div>
-            <Button variant="secondary" onClick={() => setSelectedDate(today)}>
+            <Button variant="secondary" onClick={() => setSelectedDate(getLocalDateKey(new Date()))}>
               {t("common.today")}
             </Button>
             <Button variant="ghost" onClick={() => setShowCompleted((value) => !value)}>
@@ -242,6 +265,7 @@ export const DailyTasksPage = () => {
           showCompleted={showCompleted}
           onUpdateStatus={handleUpdateStatus}
           onDeleteTask={handleDeleteTask}
+          onOpenTaskDetail={handleOpenTaskDetail}
         />
       ) : (
         <TaskBoard
@@ -253,6 +277,7 @@ export const DailyTasksPage = () => {
           projects={projects}
           onUpdateStatus={handleUpdateStatus}
           onDeleteTask={handleDeleteTask}
+          onOpenTaskDetail={handleOpenTaskDetail}
         />
       )}
       <Card>

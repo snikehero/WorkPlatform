@@ -27,6 +27,7 @@ type TaskBoardProps = {
   projects: Project[];
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
+  onOpenTaskDetail: (taskId: string) => void;
 };
 
 const columns: Array<{ key: TaskStatus; titleKey: string }> = [
@@ -40,18 +41,20 @@ type BoardTaskCardProps = {
   projectName?: string;
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
+  onOpenTaskDetail: (taskId: string) => void;
 };
 
-const BoardTaskCard = ({ task, projectName, onUpdateStatus, onDeleteTask }: BoardTaskCardProps) => (
+const BoardTaskCard = ({ task, projectName, onUpdateStatus, onDeleteTask, onOpenTaskDetail }: BoardTaskCardProps) => (
   <TaskCardBody
     task={task}
     projectName={projectName}
     onUpdateStatus={onUpdateStatus}
     onDeleteTask={onDeleteTask}
+    onOpenTaskDetail={onOpenTaskDetail}
   />
 );
 
-const TaskCardBody = ({ task, projectName, onUpdateStatus, onDeleteTask }: BoardTaskCardProps) => {
+const TaskCardBody = ({ task, projectName, onUpdateStatus, onDeleteTask, onOpenTaskDetail }: BoardTaskCardProps) => {
   const { t } = useI18n();
   return (
     <div className="rounded-lg border border-border bg-background p-3">
@@ -62,6 +65,9 @@ const TaskCardBody = ({ task, projectName, onUpdateStatus, onDeleteTask }: Board
           {projectName ? <Badge variant="neutral">{projectName}</Badge> : null}
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={() => onOpenTaskDetail(task.id)}>
+            {t("tasks.taskDetailButton")}
+          </Button>
           <Button size="sm" variant="secondary" onClick={() => onUpdateStatus(task.id, "todo")}>
             {t("tasks.todo")}
           </Button>
@@ -84,7 +90,7 @@ const TaskCardBody = ({ task, projectName, onUpdateStatus, onDeleteTask }: Board
   );
 };
 
-const SortableTaskCard = ({ task, projectName, onUpdateStatus, onDeleteTask }: BoardTaskCardProps) => {
+const SortableTaskCard = ({ task, projectName, onUpdateStatus, onDeleteTask, onOpenTaskDetail }: BoardTaskCardProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -107,6 +113,7 @@ const SortableTaskCard = ({ task, projectName, onUpdateStatus, onDeleteTask }: B
         projectName={projectName}
         onUpdateStatus={onUpdateStatus}
         onDeleteTask={onDeleteTask}
+        onOpenTaskDetail={onOpenTaskDetail}
       />
     </div>
   );
@@ -119,6 +126,7 @@ const BoardColumn = ({
   projectMap,
   onUpdateStatus,
   onDeleteTask,
+  onOpenTaskDetail,
 }: {
   columnKey: TaskStatus;
   titleKey: string;
@@ -126,6 +134,7 @@ const BoardColumn = ({
   projectMap: Map<string, Project>;
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
+  onOpenTaskDetail: (taskId: string) => void;
 }) => {
   const { t } = useI18n();
   const { setNodeRef } = useDroppable({ id: columnKey });
@@ -148,6 +157,7 @@ const BoardColumn = ({
                 projectName={task.projectId ? projectMap.get(task.projectId)?.name : undefined}
                 onUpdateStatus={onUpdateStatus}
                 onDeleteTask={onDeleteTask}
+                onOpenTaskDetail={onOpenTaskDetail}
               />
             ))
           )}
@@ -157,7 +167,7 @@ const BoardColumn = ({
   );
 };
 
-export const TaskBoard = ({ tasks, projects, onUpdateStatus, onDeleteTask }: TaskBoardProps) => {
+export const TaskBoard = ({ tasks, projects, onUpdateStatus, onDeleteTask, onOpenTaskDetail }: TaskBoardProps) => {
   const projectMap = new Map(projects.map((project) => [project.id, project]));
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [activeTaskId, setActiveTaskId] = React.useState<string | null>(null);
@@ -204,6 +214,7 @@ export const TaskBoard = ({ tasks, projects, onUpdateStatus, onDeleteTask }: Tas
               projectMap={projectMap}
               onUpdateStatus={onUpdateStatus}
               onDeleteTask={onDeleteTask}
+              onOpenTaskDetail={onOpenTaskDetail}
             />
           );
         })}
@@ -215,6 +226,7 @@ export const TaskBoard = ({ tasks, projects, onUpdateStatus, onDeleteTask }: Tas
             projectName={activeTask.projectId ? projectMap.get(activeTask.projectId)?.name : undefined}
             onUpdateStatus={onUpdateStatus}
             onDeleteTask={onDeleteTask}
+            onOpenTaskDetail={onOpenTaskDetail}
           />
         ) : null}
       </DragOverlay>
